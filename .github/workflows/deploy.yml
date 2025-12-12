@@ -140,8 +140,10 @@ jobs:
             CERT_PATH="/etc/letsencrypt/live/${{ env.NGINX_API_HOST }}/privkey.pem"
 
             mkdir -p /etc/nginx/nginx_configs
-            cp "$CONFIG_SOURCE" "$CONFIG_DEST"
-            sed -i "s|__NGINX_HOST__|${{ env.NGINX_API_HOST }}|g" "$CONFIG_DEST"
+            if [ ! -f "$CERT_PATH" ] || [ ! -f "$CONFIG_DEST" ]; then
+              cp "$CONFIG_SOURCE" "$CONFIG_DEST"
+              sed -i "s|__NGINX_HOST__|${{ env.NGINX_API_HOST }}|g" "$CONFIG_DEST"
+            fi
 
             if [ ! -f "$CERT_PATH" ]; then
               sudo certbot --nginx -d ${{ env.NGINX_API_HOST }}
