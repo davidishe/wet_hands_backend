@@ -62,15 +62,6 @@ namespace WebAPI.Controllers.Auth
       _smsSenderService = smsSenderService;
       _logger = logger;
     }
-
-    [HttpGet]
-    [AllowAnonymous]
-    [Route("health_check")]
-    public ActionResult HealthCheck()
-    {
-      return Ok("Все хорошо");
-    }
-
     [HttpPost]
     [AllowAnonymous]
     [Route("request_sms_code")]
