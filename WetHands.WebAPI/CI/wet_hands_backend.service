@@ -2,8 +2,8 @@
 Description=dotnet app running on server now
 
 [Service]
-WorkingDirectory=/var/apps/backend/laundr_backend_app
-ExecStart=/usr/bin/dotnet /var/apps/backend/laundr_backend_app/WebAPI.dll
+WorkingDirectory=/var/apps/backend/wet_hands_backend
+ExecStart=/usr/bin/dotnet /var/apps/backend/wet_hands_backend/WebAPI.dll
 Restart=always
 # Restart service after 10 seconds if the dotnet service crashes:
 RestartSec=10
