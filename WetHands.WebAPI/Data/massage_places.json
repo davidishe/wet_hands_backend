@@ -1,0 +1,36 @@
+[
+  {
+    "name": "Soul & Body Studio",
+    "city": "Moscow",
+    "description": "Certified therapists focused on deep relaxation and recovery programs.",
+    "rating": 94,
+    "mainImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA",
+    "gallery": [
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUB",
+      "iVBORw0KGgoAAAANSUhEUgAAAAUC",
+      "iVBORw0KGgoAAAANSUhEUgAAAAUD"
+    ],
+    "attributes": [
+      "Thai massage",
+      "Balinese massage",
+      "Aroma therapy"
+    ]
+  },
+  {
+    "name": "Pulse Recovery Loft",
+    "city": "Saint Petersburg",
+    "description": "Boutique studio that mixes sports recovery, trigger massage and SPA rituals.",
+    "rating": 87,
+    "mainImage": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/",
+    "gallery": [
+      "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA",
+      "/9j/4AAQSkZJRgABAQEBAQEB",
+      "data:image/jpeg;base64,/9j/4AAQSkZJRgABAg"
+    ],
+    "attributes": [
+      "Deep tissue",
+      "Sports massage",
+      "SPA program"
+    ]
+  }
+]

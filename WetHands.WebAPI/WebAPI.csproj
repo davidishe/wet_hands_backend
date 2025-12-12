@@ -81,6 +81,12 @@
     </Content> 
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Update="Data\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 
 
 </Project>
