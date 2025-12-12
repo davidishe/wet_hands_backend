@@ -106,9 +106,6 @@ jobs:
             mkdir -p /var/apps/backend/wet_hands_backend
             cp -R . /var/apps/backend/wet_hands_backend
             cp WetHands.WebAPI/CI/wet_hands_backend.service /etc/systemd/system/
-            mkdir -p /etc/nginx/nginx_configs/
-            cp /root/apps_sources/wet_hands_backend/WetHands.WebAPI/CI/api-wet-hands.rwaplace.io.conf /etc/nginx/nginx_configs/api-wet-hands.rwaplace.io.conf
-            sed -i "s|__NGINX_HOST__|${{ env.NGINX_API_HOST }}|g" /etc/nginx/nginx_configs/api-wet-hands.rwaplace.io.conf
 
             mkdir -p /var/apps/backend/wet_hands_backend/Assets
             mkdir -p /var/apps/backend/wet_hands_backend/Assets/Images
@@ -124,11 +121,39 @@ jobs:
             systemctl restart wet_hands_backend.service
 
 
+  job_nginx_config:
+    name: Ensure nginx config and certificate
+    runs-on : ubuntu-latest
+    needs: [job_four]
+    steps:
+      - name: establisihing ssh connection
+        uses: appleboy/ssh-action@master
+        with:
+          host: 95.163.241.193
+          username: root
+          key: ${{ secrets.LINUX_DEPLOY_SECRET }}
+          port: 22
+          script: |
+            whoami
+            CONFIG_SOURCE="/root/apps_sources/wet_hands_backend/WetHands.WebAPI/CI/api-wet-hands.rwaplace.io.conf"
+            CONFIG_DEST="/etc/nginx/nginx_configs/api-wet-hands.rwaplace.io.conf"
+
+            if [ ! -f "$CONFIG_DEST" ]; then
+              mkdir -p /etc/nginx/nginx_configs
+              cp "$CONFIG_SOURCE" "$CONFIG_DEST"
+              sed -i "s|__NGINX_HOST__|${{ env.NGINX_API_HOST }}|g" "$CONFIG_DEST"
+              sudo certbot --nginx -d ${{ env.NGINX_API_HOST }}
+              nginx -t
+              systemctl reload nginx
+            else
+              echo "nginx config already exists"
+            fi
+
 
   final_jobe:
     name: Delete old staff
     runs-on : ubuntu-latest
-    needs: [job_four]
+    needs: [job_nginx_config]
     steps:
       - name: establisihing ssh connection
         uses: appleboy/ssh-action@master
