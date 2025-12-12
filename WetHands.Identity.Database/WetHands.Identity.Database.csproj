@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WetHands.Core\Core.csproj"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.8"/>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="6.0.8"/>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="6.0.8"/>
+  </ItemGroup>
+
+  
+  <ItemGroup>
+    <None Include="Seed\SeedData\**" CopyToOutputDirectory="PreserveNewest"/>
+  </ItemGroup>
+
+
+
+
+
+</Project>

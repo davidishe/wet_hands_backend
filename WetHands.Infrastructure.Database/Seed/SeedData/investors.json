@@ -1,0 +1,17 @@
+[{
+    "Name": "Fred Grim",
+    "PictureUrl": "https://localhost:6011/Assets/Guesthouse_2.jpeg"
+  },
+  {
+    "Name": "Tor Odinson",
+    "PictureUrl": "https://localhost:6011/Assets/commercial-property-hero-image.jpg"
+  },
+  {
+    "Name": "Konstantin Konstantinopolsky",
+    "PictureUrl": "https://localhost:6011/Assets/photo-15.jpeg"
+  },
+  {
+    "Name": "John Tolkien",
+    "PictureUrl": "https://localhost:6011/Assets/photo-15.jpeg"
+  }
+]

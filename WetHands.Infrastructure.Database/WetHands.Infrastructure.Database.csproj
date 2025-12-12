@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WetHands.Core\Core.csproj"/>
+    <ProjectReference Include="..\WetHands.Infrastructure.Specifications/WetHands.Infrastructure.Specifications.csproj"/>
+
+  </ItemGroup>
+
+
+  <ItemGroup>
+
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="6.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="6.0.8" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="3.0.0-preview1.21075.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="6.0.8" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <None Include="Seed\SeedData\**" CopyToOutputDirectory="PreserveNewest"/>
+  </ItemGroup>
+
+
+</Project>

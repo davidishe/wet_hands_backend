@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="6.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="6.0.8" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="5.6.3" />
+    <PackageReference Include="RestSharp" Version="108.0.1" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <!-- <ProjectReference Include="..\Platform.Email/Platform.Email.csproj" /> -->
+    <!-- <ProjectReference Include="..\Platform.Services.Telegram/Platform.Services.Telegram.csproj" /> -->
+    <ProjectReference Include="..\WetHands.Core\Core.csproj" />
+    <ProjectReference Include="..\WetHands.Email\WetHands.Email.csproj" />
+    <ProjectReference Include="..\WetHands.Identity\WetHands.Identity.csproj" />
+    <ProjectReference Include="..\WetHands.Identity.Database\WetHands.Identity.Database.csproj" />
+  </ItemGroup>
+
+
+</Project>

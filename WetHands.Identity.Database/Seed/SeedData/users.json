@@ -1,0 +1,38 @@
+[{
+    "Email": "david.akobiya@gmail.com",
+    "UserName": "david.akobiya@gmail.com",
+    "FirstName": "Давид",
+    "SecondName": "Акобия",
+    "CurrentLanguage": "ru-Ru",
+    "StrapiCompanyId": 34,
+    "IsAgency": false,
+    "TelegramUserName": "da_11235813",
+    "Address": {
+      "FirstName": "David",
+      "LastName": "Earth",
+      "Street": "Bayker",
+      "City": "London",
+      "House": "22",
+      "ZipCode": "444213"
+    }
+  },
+  {
+    "Email": "akobiyada@yandex.ru",
+    "UserName": "akobiyada@yandex.ru",
+    "FirstName": "John",
+    "SecondName": "Malckovich",
+    "CurrentLanguage": "ru-Ru",
+    "StrapiCompanyId": 67,
+    "IsAgency": false,
+    "TelegramUserName": "da_11235813",
+    "Address": {
+      "FirstName": "David",
+      "LastName": "Earth",
+      "Street": "Bayker",
+      "City": "London",
+      "House": "22",
+      "ZipCode": "444213"
+    }
+  }
+
+]

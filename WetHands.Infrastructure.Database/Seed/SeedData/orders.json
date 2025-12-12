@@ -1,0 +1,16 @@
+[{
+    "ProfileId": 1,
+    "InvestorId": 1,
+    "ShareValue": 20.00
+  },
+  {
+    "ProfileId": 1,
+    "InvestorId": 2,
+    "ShareValue": 20.00
+  },
+  {
+    "ProfileId": 1,
+    "InvestorId": 3,
+    "ShareValue": 60.00
+  }
+]

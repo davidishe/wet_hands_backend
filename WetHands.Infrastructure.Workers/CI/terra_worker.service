@@ -1,0 +1,17 @@
+[Unit]
+Description=dotnet app running on server now
+
+[Service]
+WorkingDirectory=/var/apps/backend/terra_worker
+ExecStart=/usr/bin/dotnet /var/apps/backend/terra_worker/WetHands.Infrastructure.Workers.dll
+Restart=always
+# Restart service after 10 seconds if the dotnet service crashes:
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=cofee conditions app main runing on server now!
+User=root
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+[Install]
+WantedBy=multi-user.target

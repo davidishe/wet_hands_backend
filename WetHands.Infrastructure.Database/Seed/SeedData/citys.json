@@ -1,0 +1,17 @@
+[{
+    "Name": "Тбилиси",
+    "CountryId": 1
+  },
+  {
+    "Name": "Батуми",
+    "CountryId": 1
+  },
+  {
+    "Name": "Анкара",
+    "CountryId": 2
+  },
+  {
+    "Name": "Стамбул",
+    "CountryId": 2
+  }
+]

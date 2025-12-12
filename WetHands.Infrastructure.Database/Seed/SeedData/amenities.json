@@ -1,0 +1,17 @@
+[{
+    "Name": "Ocean views",
+    "IconPath": "water"
+  },
+  {
+    "Name": "Pool",
+    "IconPath": "pool"
+  },
+  {
+    "Name": "Outdoor fireplace",
+    "IconPath": "fireplace"
+  },
+  {
+    "Name": "Outdoor shower",
+    "IconPath": "shower"
+  }
+]

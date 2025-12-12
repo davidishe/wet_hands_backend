@@ -1,0 +1,17 @@
+[{
+    "Name": "Грузия",
+    "CountryIconPath": "country_geo"
+  },
+  {
+    "Name": "Турция",
+    "CountryIconPath": "country_turkey"
+  },
+  {
+    "Name": "Болгария",
+    "CountryIconPath": "country_bulgaria"
+  },
+  {
+    "Name": "Испания",
+    "CountryIconPath": "country_spain"
+  }
+]

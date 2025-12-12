@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>WebAPI</RootNamespace>
+    <Nullable>annotations</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WetHands.Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\WetHands.Infrastructure.Database\WetHands.Infrastructure.Database.csproj" />
+    <ProjectReference Include="..\WetHands.Infrastructure.Specifications\WetHands.Infrastructure.Specifications.csproj" />
+
+    <ProjectReference Include="..\WetHands.Core\Core.csproj" />
+    <ProjectReference Include="..\WetHands.Email\WetHands.Email.csproj" />
+    <ProjectReference Include="..\WetHands.Identity\WetHands.Identity.csproj" />
+    <ProjectReference Include="..\WetHands.Identity.Database\WetHands.Identity.Database.csproj" />
+    <ProjectReference Include="..\WetHands.Auth\WetHands.Auth.csproj" />
+
+  </ItemGroup>
+
+
+
+
+  
+  <ItemGroup>
+    <PackageReference Include="Pinata.Client" Version="1.0.0" />
+    <PackageReference Include="RandomNameGeneratorLibrary" Version="1.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNet.SignalR.Core" Version="2.4.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Cors" Version="2.2.0" />
+    <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="7.0.0" />
+    <PackageReference Include="runtime.osx.10.10-x64.CoreCompat.System.Drawing" Version="5.8.64" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="6.0.24" />
+    <PackageReference Include="System.Drawing.Common" Version="4.7.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.2.0" />
+
+
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="6.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="6.0.8" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="3.0.0-preview1.21075.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="6.0.8" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.7" />
+    <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="6.1.5" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="6.1.5" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="6.1.5" />
+    <PackageReference Include="FluentValidation.AspNetCore" Version="10.3.3" />
+    <PackageReference Include="Microsoft.AspNet.SignalR" Version="2.4.3" />
+    <PackageReference Include="Mailjet.Api" Version="3.0.0" />
+  </ItemGroup>
+
+  
+  <ItemGroup>
+    <PackageReference Include="TonSdk.Adnl" Version="0.2.1" />
+    <PackageReference Include="TonSdk.Client" Version="0.3.4" />
+    <PackageReference Include="TonSdk.Connect" Version="0.2.4" />
+    <PackageReference Include="TonSdk.Contracts" Version="0.3.1" />
+    <PackageReference Include="TonSdk.Core" Version="0.3.9" />
+  </ItemGroup>
+
+  
+  <ItemGroup>
+    <_ContentIncludedByDefault Remove="publish\web.config" />
+    <_ContentIncludedByDefault Remove="publish\appsettings.Development.json" />
+    <_ContentIncludedByDefault Remove="publish\appsettings.json" />
+    <_ContentIncludedByDefault Remove="publish\Seed\SeedData\bankoffices.json" />
+    <_ContentIncludedByDefault Remove="publish\Seed\SeedData\items.json" />
+    <_ContentIncludedByDefault Remove="publish\Seed\SeedData\members.json" />
+    <_ContentIncludedByDefault Remove="publish\Seed\SeedData\regions.json" />
+    <_ContentIncludedByDefault Remove="publish\Seed\SeedData\types.json" />
+    <_ContentIncludedByDefault Remove="publish\WebAPI.deps.json" />
+    <_ContentIncludedByDefault Remove="publish\WebAPI.runtimeconfig.json" />
+  </ItemGroup>
+
+  <ItemGroup> 
+    <Content Include="CI\**"> 
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory> 
+    </Content> 
+  </ItemGroup>
+
+
+
+</Project>

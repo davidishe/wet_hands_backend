@@ -1,0 +1,32 @@
+using System.Collections.Generic;
+using AutoMapper;
+using Core.Dtos;
+using Core.Identity;
+using Microsoft.AspNetCore.Identity;
+
+
+namespace WebAPI.Helpers
+{
+  public class UserRolesReslover : IValueResolver<AppUser, UserToReturnDto, IList<string>>
+  {
+    public UserRolesReslover()
+    {
+    }
+
+    private readonly UserManager<AppUser> _userManager;
+
+
+    public UserRolesReslover(UserManager<AppUser> userManager)
+    {
+      _userManager = userManager;
+    }
+
+
+    public IList<string> Resolve(AppUser user, UserToReturnDto destination, IList<string> destMember, ResolutionContext context)
+    {
+      var roles = _userManager.GetRolesAsync(user).Result;
+      return roles;
+    }
+  }
+
+}

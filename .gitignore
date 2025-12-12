@@ -1,0 +1,17 @@
+.vscode
+bin
+obj
+*.db
+*.png
+*.md
+*.db
+wwwroot
+publish
+Assets
+Migrations
+.vs
+appsettings.json
+appsettings.Development.json
+creds.conf
+.idea
+.vscode
