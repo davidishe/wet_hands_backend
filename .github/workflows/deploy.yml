@@ -52,7 +52,11 @@ jobs:
             sed -i 's/MAILJET_API_KEY/'${{ secrets.MAILJET_API_KEY }}'/' appsettings.json
             sed -i 's/DATABASE_PASSWORD/'${{ secrets.DATABASE_PASSWORD }}'/' appsettings.json
 
-            systemctl stop wet_hands_backend
+            if systemctl list-units --full -all | grep -Fq "wet_hands_backend.service"; then
+              systemctl stop wet_hands_backend
+            else
+              echo "wet_hands_backend.service not yet installed; skipping stop step"
+            fi
 
             cd /root/apps_sources/wet_hands_backend/
             dotnet restore
