@@ -11,7 +11,7 @@ namespace WebAPI.Controllers
     [Route("health_check")]
     public ActionResult HealthCheck()
     {
-      return Ok("Все хорошо");
+      return Ok("Все хорошо, все работает!");
     }
   }
 }
