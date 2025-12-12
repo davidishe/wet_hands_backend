@@ -137,17 +137,20 @@ jobs:
             whoami
             CONFIG_SOURCE="/root/apps_sources/wet_hands_backend/WetHands.WebAPI/CI/api-wet-hands.rwaplace.io.conf"
             CONFIG_DEST="/etc/nginx/nginx_configs/api-wet-hands.rwaplace.io.conf"
+            CERT_PATH="/etc/letsencrypt/live/${{ env.NGINX_API_HOST }}/privkey.pem"
 
-            if [ ! -f "$CONFIG_DEST" ]; then
-              mkdir -p /etc/nginx/nginx_configs
-              cp "$CONFIG_SOURCE" "$CONFIG_DEST"
-              sed -i "s|__NGINX_HOST__|${{ env.NGINX_API_HOST }}|g" "$CONFIG_DEST"
+            mkdir -p /etc/nginx/nginx_configs
+            cp "$CONFIG_SOURCE" "$CONFIG_DEST"
+            sed -i "s|__NGINX_HOST__|${{ env.NGINX_API_HOST }}|g" "$CONFIG_DEST"
+
+            if [ ! -f "$CERT_PATH" ]; then
               sudo certbot --nginx -d ${{ env.NGINX_API_HOST }}
-              nginx -t
-              systemctl reload nginx
             else
-              echo "nginx config already exists"
+              echo "Certificate for ${{ env.NGINX_API_HOST }} already exists"
             fi
+
+            nginx -t
+            systemctl reload nginx
 
 
   final_jobe:
