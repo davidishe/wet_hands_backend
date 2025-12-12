@@ -2,6 +2,8 @@ name: Prod | Dotnet app deployment workflow
 on:
   push: 
     branches: [main]
+env:
+  NGINX_API_HOST: api-wet-hands.rwaplace.io
 
 jobs:
   job_one:
@@ -105,7 +107,8 @@ jobs:
             cp -R . /var/apps/backend/wet_hands_backend
             cp WetHands.WebAPI/CI/wet_hands_backend.service /etc/systemd/system/
             mkdir -p /etc/nginx/nginx_configs/
-            cp /root/apps_sources/wet_hands_backend/WetHands.WebAPI/CI/api-laundr.rwaplace.io.conf /etc/nginx/nginx_configs/
+            cp /root/apps_sources/wet_hands_backend/WetHands.WebAPI/CI/api-wet-hands.rwaplace.io.conf /etc/nginx/nginx_configs/api-wet-hands.rwaplace.io.conf
+            sed -i "s|__NGINX_HOST__|${{ env.NGINX_API_HOST }}|g" /etc/nginx/nginx_configs/api-wet-hands.rwaplace.io.conf
 
             mkdir -p /var/apps/backend/wet_hands_backend/Assets
             mkdir -p /var/apps/backend/wet_hands_backend/Assets/Images
