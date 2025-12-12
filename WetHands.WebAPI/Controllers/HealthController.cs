@@ -7,6 +7,7 @@ namespace WebAPI.Controllers
   public class HealthController : BaseApiController
   {
     [HttpGet]
+    [AllowAnonymous]
     [Route("health_check")]
     public ActionResult HealthCheck()
     {
