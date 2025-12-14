@@ -6,6 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="..\WetHands.Core\Core.csproj"/>
     <ProjectReference Include="..\WetHands.Infrastructure.Database\WetHands.Infrastructure.Database.csproj"/>
+    <ProjectReference Include="..\WetHands.Email\WetHands.Email.csproj"/>
     <ProjectReference Include="..\WetHands.Identity\WetHands.Identity.csproj"/>
   </ItemGroup>
   <ItemGroup>

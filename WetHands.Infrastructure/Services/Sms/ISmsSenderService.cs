@@ -6,6 +6,6 @@ namespace WetHands.Infrastructure.Services.Sms
 {
   public interface ISmsSenderService
   {
-    Task SendOneTimeCodeAsync(string phoneNumber, OneTimeCode code, string? template = null, CancellationToken cancellationToken = default);
+    Task SendOneTimeCodeAsync(string email, OneTimeCode code, string? langCode = null, CancellationToken cancellationToken = default);
   }
 }

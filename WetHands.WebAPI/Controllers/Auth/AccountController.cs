@@ -14,12 +14,13 @@ using System.Web;
 using System;
 using Microsoft.Extensions.Configuration;
 using WetHands.Core.Models;
-using WetHands.Auth.AuthService;
 using RandomNameGeneratorLibrary;
 using System.Threading;
 using WetHands.Infrastructure.Services.Security;
 using WetHands.Infrastructure.Services.Sms;
 using System.Text.RegularExpressions;
+using WetHands.Email.EmailService;
+using WetHands.Email.Models;
 
 
 namespace WebAPI.Controllers.Auth
@@ -31,11 +32,11 @@ namespace WebAPI.Controllers.Auth
     private readonly UserManager<AppUser> _userManager;
     private readonly SignInManager<AppUser> _signInManager;
     private readonly ITokenService _tokenService;
-    private readonly IAuthService _authService;
     private readonly IMapper _mapper;
     private readonly ILogger<AccountController> _logger;
     private readonly IOneTimeCodeService _oneTimeCodeService;
     private readonly ISmsSenderService _smsSenderService;
+    private readonly IEmailService _emailService;
 
 
     private readonly string _emailDomainMailJetSender;
@@ -46,9 +47,9 @@ namespace WebAPI.Controllers.Auth
       ITokenService tokenService,
       IConfiguration config,
       IMapper mapper,
-      IAuthService authService,
       IOneTimeCodeService oneTimeCodeService,
       ISmsSenderService smsSenderService,
+      IEmailService emailService,
       ILogger<AccountController> logger
        )
     {
@@ -57,9 +58,9 @@ namespace WebAPI.Controllers.Auth
       _mapper = mapper;
       _userManager = userManager;
       _emailDomainMailJetSender = config.GetSection("AppSettings:EmailDomain").Value;
-      _authService = authService;
       _oneTimeCodeService = oneTimeCodeService;
       _smsSenderService = smsSenderService;
+      _emailService = emailService;
       _logger = logger;
     }
     [HttpPost]
@@ -90,7 +91,7 @@ namespace WebAPI.Controllers.Auth
 
     /// <summary>
     /// данный метод получает на входе эл.почту, создает пользователя если его нет
-    /// отправляет токен на почту через модуль nopassword
+    /// отправляет одноразовый код на почту
     /// firstName указывается в случае если запрос идет со страницы регистрации, а не входа
     /// </summary>
     /// <param name="email"></param>
@@ -128,12 +129,28 @@ namespace WebAPI.Controllers.Auth
         await _userManager.CreateAsync(userToCreate);
       }
 
-      // send code via email
-      var token = await _authService.Login(email, _emailDomainMailJetSender, langCode);
-      if (token is not null)
-        return Ok(new { token = token });
+      var code = _oneTimeCodeService.CreateCode();
+      var (subject, body) = BuildEmailCodeMessage(langCode, code.Code);
 
-      return BadRequest("Что-то пошло не так");
+      var mailRequest = new MailRequest()
+      {
+        MailFrom = _emailDomainMailJetSender,
+        MailTo = email,
+        Subject = subject,
+        Body = body
+      };
+
+      try
+      {
+        await _emailService.SendEmailMessage(mailRequest);
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "Failed to send one-time code email to {Email}", email);
+        return StatusCode(500, new ApiResponse(500, "Не удалось отправить код на email."));
+      }
+
+      return Ok(new { expiresAtUtc = code.ExpiresAtUtc });
     }
 
 
@@ -197,70 +214,6 @@ namespace WebAPI.Controllers.Auth
 
 
     }
-
-
-
-    /// <summary>
-    /// Получает на входе почту и токен (при регистрации - имя пользователя)
-    /// Верифицирует почту
-    /// </summary>
-    /// <param name="email"></param>
-    /// <param name="token"></param>
-    /// <param name="firstName"></param>
-    /// <returns></returns>
-    [HttpPost]
-    [AllowAnonymous]
-    [Route("login_with_email_code_demo")]
-    public async Task<ActionResult<UserToReturnDto>> LoginWithEmailCodeDemo()
-    {
-
-
-
-      var email = "johnny@mnemonic.com";
-
-      // var userToCreate = new AppUser()
-      // {
-      //   Email = email,
-      //   FirstName = "Johnny",
-      //   UserName = email,
-      //   CurrentLanguage = "ru-Ru",
-      //   IsAdmin = false,
-      //   IsAgency = false,
-      //   Currency = Currency.RUB,
-      //   WasOnline = DateTime.Now,
-      //   Nickname = "Johnny Mnemonic"
-      // };
-
-      // await _userManager.CreateAsync(userToCreate);
-
-      // send code via email
-      var token = await _authService.Login(email, _emailDomainMailJetSender, "ru-Ru");
-      if (token is null)
-        return Ok(new ApiResponse(405));
-
-
-      var decodedToken = HttpUtility.UrlDecode(token);
-      var userForToken = await _userManager.FindByNameAsync(email);
-
-      if (userForToken == null) return Unauthorized(new ApiResponse(404));
-
-
-      var userToReturn = new UserToReturnDto
-      {
-        Email = userForToken.Email,
-        FirstName = userForToken.FirstName,
-        SecondName = userForToken.SecondName,
-        Token = decodedToken,
-        UserRoles = await _userManager.GetRolesAsync(userForToken)
-      };
-      return Ok(userToReturn);
-
-
-    }
-
-
-
-
 
 
     [Authorize]
@@ -389,6 +342,22 @@ namespace WebAPI.Controllers.Auth
       DateTime start = new DateTime(1995, 1, 1);
       int range = (DateTime.Today - start).Days;
       return start.AddDays(gen.Next(range));
+    }
+
+    private static (string Subject, string Body) BuildEmailCodeMessage(string langCode, string codeValue)
+    {
+      var isRussian = !string.IsNullOrWhiteSpace(langCode) && langCode.StartsWith("ru", StringComparison.OrdinalIgnoreCase);
+
+      if (isRussian)
+      {
+        var subject = "Код для входа в приложение";
+        var body = $"<html><p>Ваш одноразовый код: <strong>{codeValue}</strong>.</p><p>Введите его в приложении, чтобы продолжить.</p></html>";
+        return (subject, body);
+      }
+
+      var subjectEn = "Your one-time login code";
+      var bodyEn = $"<html><p>Your one-time code is <strong>{codeValue}</strong>.</p><p>Enter it in the app to continue.</p></html>";
+      return (subjectEn, bodyEn);
     }
 
     private static string NormalizePhoneNumber(string phoneNumber)

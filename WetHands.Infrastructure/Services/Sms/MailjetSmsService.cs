@@ -1,93 +1,83 @@
 using System;
 using System.Globalization;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using WetHands.Core.Models.Identity;
-using WetHands.Core.Models.Options;
+using WetHands.Email.EmailService;
+using WetHands.Email.Models;
 
 namespace WetHands.Infrastructure.Services.Sms
 {
   public class MailjetSmsService : ISmsSenderService
   {
-
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly MailJetSmsOptions _options;
-    private readonly MailJetCredentialsOptions _credentials;
-    private readonly string _basicAuthorizationValue;
+    private readonly IEmailService _emailService;
     private readonly ILogger<MailjetSmsService> _logger;
+    private readonly string _mailFrom;
+    private readonly string _appName;
 
     public MailjetSmsService(
-      IHttpClientFactory httpClientFactory,
-      IOptions<MailJetSmsOptions> options,
-      IOptions<MailJetCredentialsOptions> credentials,
+      IEmailService emailService,
+      IConfiguration configuration,
       ILogger<MailjetSmsService> logger)
     {
-      _httpClientFactory = httpClientFactory;
-      _logger = logger;
-      _options = options.Value;
-      _credentials = credentials.Value;
+      _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
+      _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-      if (string.IsNullOrWhiteSpace(_options.ApiToken) || string.IsNullOrWhiteSpace(_options.From))
-      {
-        throw new InvalidOperationException("MailJet SMS options must be configured.");
-      }
+      _mailFrom = configuration.GetValue<string>("AppSettings:EmailDomain")
+                 ?? throw new InvalidOperationException("AppSettings:EmailDomain must be configured.");
 
-      if (string.IsNullOrWhiteSpace(_credentials.MailJetApiKey) || string.IsNullOrWhiteSpace(_credentials.MailJetApiSecret))
-      {
-        throw new InvalidOperationException("MailJet credentials must be configured.");
-      }
-
-      _basicAuthorizationValue = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_credentials.MailJetApiKey}:{_credentials.MailJetApiSecret}"));
+      var configuredAppName = configuration.GetValue<string>("AppSettings:AppName");
+      _appName = string.IsNullOrWhiteSpace(configuredAppName)
+        ? "WetHands"
+        : configuredAppName.Trim().Trim('\'');
     }
 
-    public async Task SendOneTimeCodeAsync(string phoneNumber, OneTimeCode code, string? template = null, CancellationToken cancellationToken = default)
+    public async Task SendOneTimeCodeAsync(string email, OneTimeCode code, string? langCode = null, CancellationToken cancellationToken = default)
     {
-      if (string.IsNullOrWhiteSpace(phoneNumber))
-        throw new ArgumentException("Phone number is required.", nameof(phoneNumber));
+      cancellationToken.ThrowIfCancellationRequested();
+
+      if (string.IsNullOrWhiteSpace(email))
+        throw new ArgumentException("Email is required.", nameof(email));
 
       if (code is null)
         throw new ArgumentNullException(nameof(code));
 
-      var message = template ?? $"Ваш код: {code.Code}. Действителен до {code.ExpiresAtUtc:yyyy-MM-dd HH:mm} UTC.";
+      var (subject, body) = BuildEmailContent(langCode, code);
 
-      var payload = new
+      var mailRequest = new MailRequest
       {
-        From = _options.From,
-        To = phoneNumber,
-        Text = message
+        MailFrom = _mailFrom,
+        MailTo = email,
+        Subject = subject,
+        Body = body
       };
 
-      var httpClient = _httpClientFactory.CreateClient("MailjetSms");
-      using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.mailjet.com/v4/sms-send")
+      _logger.LogDebug("Sending email with one-time code to {Email}.", email);
+      await _emailService.SendEmailMessage(mailRequest).ConfigureAwait(false);
+
+      _logger.LogInformation(
+        "Email with one-time code sent to {Email}. Expires at {ExpiresAt}.",
+        email,
+        code.ExpiresAtUtc.ToString("o", CultureInfo.InvariantCulture));
+    }
+
+    private (string Subject, string Body) BuildEmailContent(string? langCode, OneTimeCode code)
+    {
+      var isRussian = string.IsNullOrWhiteSpace(langCode) ||
+                      langCode.StartsWith("ru", StringComparison.OrdinalIgnoreCase);
+
+      if (isRussian)
       {
-        Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-      };
-
-      Console.WriteLine(request.RequestUri);
-      Console.WriteLine(request.RequestUri);
-      Console.WriteLine(request.RequestUri);
-      Console.WriteLine(request.RequestUri);
-
-      request.Headers.TryAddWithoutValidation("Authorization", $"Basic {_basicAuthorizationValue}");
-      request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {_options.ApiToken}");
-
-      _logger.LogDebug("Sending SMS with one-time code to {Phone}.", phoneNumber);
-
-      var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-      if (!response.IsSuccessStatusCode)
-      {
-        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        _logger.LogError("Failed to send SMS via Mailjet. Status: {StatusCode}. Body: {Body}", response.StatusCode, responseBody);
-        throw new InvalidOperationException($"Failed to send SMS via Mailjet. Status code: {response.StatusCode}.");
+        var subject = $"Код для входа в {_appName}";
+        var body = $"<html><p>Ваш одноразовый код: <strong>{code.Code}</strong>.</p><p>Он действителен до {code.ExpiresAtUtc:dd.MM.yyyy HH:mm} (UTC).</p></html>";
+        return (subject, body);
       }
 
-      _logger.LogInformation("SMS with one-time code sent to {Phone}. Expires at {ExpiresAt}.", phoneNumber, code.ExpiresAtUtc.ToString("o", CultureInfo.InvariantCulture));
+      var subjectEn = $"Your {_appName} login code";
+      var bodyEn = $"<html><p>Your one-time code is <strong>{code.Code}</strong>.</p><p>The code expires at {code.ExpiresAtUtc:dd.MM.yyyy HH:mm} (UTC).</p></html>";
+      return (subjectEn, bodyEn);
     }
   }
 }
