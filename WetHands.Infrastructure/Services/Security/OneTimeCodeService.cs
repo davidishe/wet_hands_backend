@@ -8,14 +8,16 @@ namespace WetHands.Infrastructure.Services.Security
 {
   public class OneTimeCodeService : IOneTimeCodeService
   {
+    private const int DefaultCodeLength = 4;
     private readonly ILogger<OneTimeCodeService> _logger;
+    private static readonly TimeSpan CodeLifetime = TimeSpan.FromMinutes(30);
 
     public OneTimeCodeService(ILogger<OneTimeCodeService> logger)
     {
       _logger = logger;
     }
 
-    public OneTimeCode CreateCode(int length = 6)
+    public OneTimeCode CreateCode(int length = DefaultCodeLength)
     {
       if (length <= 0) throw new ArgumentOutOfRangeException(nameof(length), length, "Length must be greater than zero.");
 
@@ -35,7 +37,7 @@ namespace WetHands.Infrastructure.Services.Security
       return new OneTimeCode
       {
         Code = codeValue,
-        ExpiresAtUtc = DateTime.UtcNow.AddMonths(1)
+        ExpiresAtUtc = DateTime.UtcNow.Add(CodeLifetime)
       };
     }
   }

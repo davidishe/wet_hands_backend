@@ -4,6 +4,6 @@ namespace WetHands.Infrastructure.Services.Security
 {
   public interface IOneTimeCodeService
   {
-    OneTimeCode CreateCode(int length = 6);
+    OneTimeCode CreateCode(int length = 4);
   }
 }
