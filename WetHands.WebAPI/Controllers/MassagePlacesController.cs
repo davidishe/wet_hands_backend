@@ -181,6 +181,11 @@ namespace WebAPI.Controllers
     [Route("catalog")]
     public async Task<ActionResult<IReadOnlyList<MassagePlaceDto>>> GetCatalog(
       [FromQuery] string? q = null,
+      [FromQuery] string? categories = null,
+      [FromQuery] string? country = null,
+      [FromQuery] string? city = null,
+      [FromQuery] int? minRating = null,
+      [FromQuery] int? maxRating = null,
       [FromQuery] int offset = 0,
       [FromQuery] int limit = 200,
       [FromQuery] bool includeMainImage = true,
@@ -198,6 +203,58 @@ namespace WebAPI.Controllers
         await using var stream = System.IO.File.OpenRead(_catalogFilePath);
         var places = await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
           ?? new List<MassagePlaceDto>();
+
+        // Default country for current dataset (no explicit country field in JSON).
+        for (var i = 0; i < places.Count; i++)
+        {
+          var p = places[i];
+          if (p != null && string.IsNullOrWhiteSpace(p.Country))
+          {
+            // All seed data cities are in Russia for now.
+            places[i] = new MassagePlaceDto
+            {
+              Name = p.Name,
+              Country = "Russia",
+              City = p.City,
+              Description = p.Description,
+              Rating = p.Rating,
+              MainImage = p.MainImage,
+              Gallery = p.Gallery,
+              Attributes = p.Attributes
+            };
+          }
+        }
+
+        // Server-side filters.
+        var selectedCategories = ParseCsv(categories);
+        var countryFilter = Normalize(country);
+        var cityFilter = Normalize(city);
+
+        if (minRating.HasValue)
+        {
+          minRating = Math.Clamp(minRating.Value, 0, 100);
+        }
+        if (maxRating.HasValue)
+        {
+          maxRating = Math.Clamp(maxRating.Value, 0, 100);
+        }
+
+        if (selectedCategories.Count > 0 ||
+            !string.IsNullOrWhiteSpace(countryFilter) ||
+            !string.IsNullOrWhiteSpace(cityFilter) ||
+            minRating.HasValue ||
+            maxRating.HasValue)
+        {
+          places = places
+            .Where(p => MatchesFilters(
+              p,
+              selectedCategories,
+              countryFilter,
+              cityFilter,
+              minRating,
+              maxRating))
+            .ToList();
+        }
 
         // Server-side search.
         var query = (q ?? string.Empty).Trim();
@@ -229,6 +286,7 @@ namespace WebAPI.Controllers
           projected.Add(new MassagePlaceDto
           {
             Name = place.Name ?? string.Empty,
+            Country = place.Country,
             City = place.City,
             Description = place.Description ?? string.Empty,
             Rating = place.Rating,
@@ -288,12 +346,27 @@ namespace WebAPI.Controllers
 
         if (includeMainImage && includeGallery)
         {
+          if (string.IsNullOrWhiteSpace(found.Country))
+          {
+            found = new MassagePlaceDto
+            {
+              Name = found.Name,
+              Country = "Russia",
+              City = found.City,
+              Description = found.Description,
+              Rating = found.Rating,
+              MainImage = found.MainImage,
+              Gallery = found.Gallery,
+              Attributes = found.Attributes
+            };
+          }
           return Ok(found);
         }
 
         return Ok(new MassagePlaceDto
         {
           Name = found.Name,
+          Country = string.IsNullOrWhiteSpace(found.Country) ? "Russia" : found.Country,
           City = found.City,
           Description = found.Description,
           Rating = found.Rating,
@@ -320,6 +393,70 @@ namespace WebAPI.Controllers
       return Ok(MassageCategories);
     }
 
+    [HttpGet("filterOptions")]
+    public async Task<ActionResult<MassagePlaceFilterOptionsResponse>> GetFilterOptions(
+      CancellationToken cancellationToken = default)
+    {
+      if (!System.IO.File.Exists(_catalogFilePath))
+      {
+        _logger.LogWarning("Massage catalog file {FilePath} not found", _catalogFilePath);
+        return Ok(new MassagePlaceFilterOptionsResponse
+        {
+          Countries = new[] { "Russia" },
+          Cities = Array.Empty<string>(),
+          Categories = MassageCategories.Keys.ToArray(),
+          MinRating = 0,
+          MaxRating = 100
+        });
+      }
+
+      try
+      {
+        await using var stream = System.IO.File.OpenRead(_catalogFilePath);
+        var places = await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
+          ?? new List<MassagePlaceDto>();
+
+        var countries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var cities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var min = 100;
+        var max = 0;
+
+        foreach (var p in places)
+        {
+          if (p == null) continue;
+          var ctry = string.IsNullOrWhiteSpace(p.Country) ? "Russia" : p.Country.Trim();
+          if (ctry.Length > 0) countries.Add(ctry);
+
+          if (!string.IsNullOrWhiteSpace(p.City)) cities.Add(p.City.Trim());
+
+          min = Math.Min(min, p.Rating);
+          max = Math.Max(max, p.Rating);
+        }
+
+        var countriesArr = countries.Count == 0 ? new[] { "Russia" } : countries.OrderBy(x => x).ToArray();
+        var citiesArr = cities.OrderBy(x => x).ToArray();
+
+        return Ok(new MassagePlaceFilterOptionsResponse
+        {
+          Countries = countriesArr,
+          Cities = citiesArr,
+          Categories = MassageCategories.Keys.ToArray(),
+          MinRating = Math.Clamp(min, 0, 100),
+          MaxRating = Math.Clamp(max, 0, 100)
+        });
+      }
+      catch (JsonException ex)
+      {
+        _logger.LogError(ex, "Invalid massage catalog JSON in {FilePath}", _catalogFilePath);
+        return StatusCode(500, new ApiResponse(500, "Massage catalog JSON is invalid."));
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+      {
+        _logger.LogError(ex, "Unable to read massage catalog file {FilePath}", _catalogFilePath);
+        return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog file."));
+      }
+    }
+
     private static bool MatchesQuery(MassagePlaceDto place, string q)
     {
       if (place == null) return false;
@@ -333,6 +470,12 @@ namespace WebAPI.Controllers
 
       if (!string.IsNullOrWhiteSpace(place.City) &&
           place.City.Contains(q, StringComparison.OrdinalIgnoreCase))
+      {
+        return true;
+      }
+
+      if (!string.IsNullOrWhiteSpace(place.Country) &&
+          place.Country.Contains(q, StringComparison.OrdinalIgnoreCase))
       {
         return true;
       }
@@ -354,6 +497,92 @@ namespace WebAPI.Controllers
       }
 
       return false;
+    }
+
+    private static bool MatchesFilters(
+      MassagePlaceDto place,
+      IReadOnlyList<string> selectedCategories,
+      string? country,
+      string? city,
+      int? minRating,
+      int? maxRating)
+    {
+      if (place == null) return false;
+
+      if (!string.IsNullOrWhiteSpace(country))
+      {
+        var effectiveCountry = string.IsNullOrWhiteSpace(place.Country) ? "Russia" : place.Country;
+        if (effectiveCountry == null || !effectiveCountry.Contains(country, StringComparison.OrdinalIgnoreCase))
+        {
+          return false;
+        }
+      }
+
+      if (!string.IsNullOrWhiteSpace(city))
+      {
+        if (string.IsNullOrWhiteSpace(place.City) ||
+            !place.City.Contains(city, StringComparison.OrdinalIgnoreCase))
+        {
+          return false;
+        }
+      }
+
+      if (minRating.HasValue && place.Rating < minRating.Value) return false;
+      if (maxRating.HasValue && place.Rating > maxRating.Value) return false;
+
+      if (selectedCategories.Count > 0)
+      {
+        // Category match: place has at least one attribute belonging to any selected category.
+        var attrs = place.Attributes ?? Array.Empty<string>();
+        var hasAny = false;
+
+        foreach (var category in selectedCategories)
+        {
+          if (!MassageCategories.TryGetValue(category, out var types) || types == null) continue;
+
+          foreach (var attr in attrs)
+          {
+            if (string.IsNullOrWhiteSpace(attr)) continue;
+            // Exact match to avoid accidental substring matches.
+            if (types.Contains(attr))
+            {
+              hasAny = true;
+              break;
+            }
+          }
+
+          if (hasAny) break;
+        }
+
+        if (!hasAny) return false;
+      }
+
+      return true;
+    }
+
+    private static List<string> ParseCsv(string? value)
+    {
+      if (string.IsNullOrWhiteSpace(value)) return new List<string>();
+      return value
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
+    }
+
+    private static string? Normalize(string? value)
+    {
+      var trimmed = value?.Trim();
+      return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    public class MassagePlaceFilterOptionsResponse
+    {
+      public required IReadOnlyList<string> Countries { get; init; }
+      public required IReadOnlyList<string> Cities { get; init; }
+      public required IReadOnlyList<string> Categories { get; init; }
+      public required int MinRating { get; init; }
+      public required int MaxRating { get; init; }
     }
   }
 }

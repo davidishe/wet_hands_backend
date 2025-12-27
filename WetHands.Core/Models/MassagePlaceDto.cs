@@ -15,6 +15,7 @@ namespace WetHands.Core.Models
     }
 
     public required string Name { get; init; }
+    public string? Country { get; init; }
     public string? City { get; init; }
     public required string Description { get; init; }
     /// <summary>Rating from 0 to 100.</summary>
