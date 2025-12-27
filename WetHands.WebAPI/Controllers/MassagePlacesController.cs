@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -179,6 +180,9 @@ namespace WebAPI.Controllers
     [Route("")]
     [Route("catalog")]
     public async Task<ActionResult<IReadOnlyList<MassagePlaceDto>>> GetCatalog(
+      [FromQuery] string? q = null,
+      [FromQuery] int offset = 0,
+      [FromQuery] int limit = 200,
       [FromQuery] bool includeMainImage = true,
       [FromQuery] bool includeGallery = true,
       CancellationToken cancellationToken = default)
@@ -195,6 +199,25 @@ namespace WebAPI.Controllers
         var places = await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
           ?? new List<MassagePlaceDto>();
 
+        // Server-side search.
+        var query = (q ?? string.Empty).Trim();
+        if (query.Length > 0)
+        {
+          places = places
+            .Where(p => MatchesQuery(p, query))
+            .OrderByDescending(p => p.Rating)
+            .ToList();
+        }
+
+        // Server-side paging (useful for search).
+        if (offset < 0) offset = 0;
+        if (limit <= 0) limit = 200;
+        limit = Math.Min(limit, 500);
+        if (offset > 0 || limit < places.Count)
+        {
+          places = places.Skip(offset).Take(limit).ToList();
+        }
+
         if (includeMainImage && includeGallery)
         {
           return Ok(places);
@@ -205,13 +228,13 @@ namespace WebAPI.Controllers
         {
           projected.Add(new MassagePlaceDto
           {
-            Name = place.Name,
+            Name = place.Name ?? string.Empty,
             City = place.City,
-            Description = place.Description,
+            Description = place.Description ?? string.Empty,
             Rating = place.Rating,
-            MainImage = includeMainImage ? place.MainImage : string.Empty,
-            Gallery = includeGallery ? place.Gallery : Array.Empty<string>(),
-            Attributes = place.Attributes
+            MainImage = includeMainImage ? (place.MainImage ?? string.Empty) : string.Empty,
+            Gallery = includeGallery ? (place.Gallery ?? Array.Empty<string>()) : Array.Empty<string>(),
+            Attributes = place.Attributes ?? Array.Empty<string>()
           });
         }
 
@@ -295,6 +318,42 @@ namespace WebAPI.Controllers
     public ActionResult<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetCategories()
     {
       return Ok(MassageCategories);
+    }
+
+    private static bool MatchesQuery(MassagePlaceDto place, string q)
+    {
+      if (place == null) return false;
+      if (string.IsNullOrWhiteSpace(q)) return true;
+
+      if (!string.IsNullOrWhiteSpace(place.Name) &&
+          place.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+      {
+        return true;
+      }
+
+      if (!string.IsNullOrWhiteSpace(place.City) &&
+          place.City.Contains(q, StringComparison.OrdinalIgnoreCase))
+      {
+        return true;
+      }
+
+      if (!string.IsNullOrWhiteSpace(place.Description) &&
+          place.Description.Contains(q, StringComparison.OrdinalIgnoreCase))
+      {
+        return true;
+      }
+
+      var attrs = place.Attributes;
+      if (attrs != null)
+      {
+        foreach (var attr in attrs)
+        {
+          if (string.IsNullOrWhiteSpace(attr)) continue;
+          if (attr.Contains(q, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+      }
+
+      return false;
     }
   }
 }
