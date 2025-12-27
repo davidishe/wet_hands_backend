@@ -26,6 +26,146 @@ namespace WebAPI.Controllers
       ReadCommentHandling = JsonCommentHandling.Skip
     };
 
+    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> MassageCategories =
+      new Dictionary<string, IReadOnlyList<string>>
+      {
+        ["Классические и лечебные"] = new[]
+        {
+          "Классический массаж",
+          "Лечебный массаж",
+          "Профилактический массаж",
+          "Общеукрепляющий массаж",
+          "Локальный (зональный) массаж",
+          "Сегментарный массаж",
+          "Периостальный массаж",
+          "Рефлекторно-сегментарный массаж",
+          "Соединительнотканный массаж",
+          "Миофасциальный релиз",
+          "Триггерный массаж",
+          "Посттравматический массаж",
+          "Реабилитационный массаж"
+        },
+        ["Медицинские (по показаниям)"] = new[]
+        {
+          "Ортопедический массаж",
+          "Неврологический массаж",
+          "Кардиологический массаж",
+          "Пульмонологический массаж",
+          "Висцеральный массаж",
+          "Урологический массаж",
+          "Гинекологический массаж",
+          "Логопедический массаж",
+          "Детский лечебный массаж",
+          "Массаж для беременных (медицинский протокол)"
+        },
+        ["Спортивные"] = new[]
+        {
+          "Спортивный массаж",
+          "Предтренировочный",
+          "Послетренировочный",
+          "Восстановительный",
+          "Тонизирующий",
+          "Расслабляющий спортивный",
+          "Массаж при мышечных спазмах",
+          "Массаж для бегунов",
+          "Массаж для силовых тренировок"
+        },
+        ["Восточные и традиционные практики"] = new[]
+        {
+          "Тайский массаж",
+          "Балийский массаж",
+          "Китайский массаж (Туина)",
+          "Шиацу",
+          "Японский массаж Амма",
+          "Индийский массаж (Абхьянга)",
+          "Аюрведический массаж",
+          "Ломи-ломи (гавайский)",
+          "Тибетский массаж",
+          "Кореанский массаж",
+          "Бирманский массаж"
+        },
+        ["Расслабляющие и SPA"] = new[]
+        {
+          "Релакс-массаж",
+          "Антистресс-массаж",
+          "Аромамассаж",
+          "Масляный массаж",
+          "Свечной массаж",
+          "Шоколадный массаж",
+          "Медовый массаж",
+          "Винный массаж",
+          "Массаж с камнями (стоун-терапия)",
+          "Тепловой массаж",
+          "Холодный массаж (крио-элементы)"
+        },
+        ["Косметические и эстетические"] = new[]
+        {
+          "Косметический массаж лица",
+          "Буккальный массаж",
+          "Скульптурный массаж лица",
+          "Пластический массаж",
+          "Лифтинг-массаж",
+          "Антивозрастной массаж",
+          "Лимфодренажный массаж",
+          "Антицеллюлитный массаж",
+          "Моделирующий массаж",
+          "Массаж шеи и декольте"
+        },
+        ["Лимфодренаж и коррекция фигуры"] = new[]
+        {
+          "Ручной лимфодренаж",
+          "Аппаратный лимфодренаж",
+          "Вакуумный массаж",
+          "LPG-массаж",
+          "Баночный массаж",
+          "Массаж для похудения",
+          "Коррекционный массаж",
+          "Детокс-массаж"
+        },
+        ["Рефлексотерапия"] = new[]
+        {
+          "Рефлекторный массаж",
+          "Точечный массаж",
+          "Акупрессура",
+          "Су-джок",
+          "Массаж стоп",
+          "Плантарный массаж",
+          "Аурикулярный массаж"
+        },
+        ["Аппаратные виды"] = new[]
+        {
+          "Вибромассаж",
+          "Ультразвуковой массаж",
+          "Вакуумно-роликовый массаж",
+          "Гидромассаж",
+          "Подводный душ-массаж",
+          "Прессотерапия",
+          "Электромиостимуляция",
+          "Пневмомассаж"
+        },
+        ["Специальные категории"] = new[]
+        {
+          "Детский массаж",
+          "Массаж для новорождённых",
+          "Массаж для пожилых",
+          "Офисный массаж",
+          "Экспресс-массаж",
+          "Корпоративный массаж",
+          "Домашний массаж",
+          "Психосоматический массаж",
+          "Энергетический массаж"
+        },
+        ["Альтернативные и энергетические"] = new[]
+        {
+          "Энергетический массаж",
+          "Рэйки-массаж",
+          "Биоэнергетический массаж",
+          "Чакральный массаж",
+          "Краниосакральная терапия",
+          "Остеопатические техники"
+        }
+      };
+
     public MassagePlacesController(
       IWebHostEnvironment environment,
       ILogger<MassagePlacesController> logger)
@@ -38,7 +178,10 @@ namespace WebAPI.Controllers
     [HttpGet]
     [Route("")]
     [Route("catalog")]
-    public async Task<ActionResult<IReadOnlyList<MassagePlaceDto>>> GetCatalog(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<MassagePlaceDto>>> GetCatalog(
+      [FromQuery] bool includeMainImage = true,
+      [FromQuery] bool includeGallery = true,
+      CancellationToken cancellationToken = default)
     {
       if (!System.IO.File.Exists(_catalogFilePath))
       {
@@ -52,7 +195,27 @@ namespace WebAPI.Controllers
         var places = await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
           ?? new List<MassagePlaceDto>();
 
-        return Ok(places);
+        if (includeMainImage && includeGallery)
+        {
+          return Ok(places);
+        }
+
+        var projected = new List<MassagePlaceDto>(places.Count);
+        foreach (var place in places)
+        {
+          projected.Add(new MassagePlaceDto
+          {
+            Name = place.Name,
+            City = place.City,
+            Description = place.Description,
+            Rating = place.Rating,
+            MainImage = includeMainImage ? place.MainImage : string.Empty,
+            Gallery = includeGallery ? place.Gallery : Array.Empty<string>(),
+            Attributes = place.Attributes
+          });
+        }
+
+        return Ok(projected);
       }
       catch (JsonException ex)
       {
@@ -64,6 +227,74 @@ namespace WebAPI.Controllers
         _logger.LogError(ex, "Unable to read massage catalog file {FilePath}", _catalogFilePath);
         return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog file."));
       }
+    }
+
+    /// <summary>
+    /// Returns a single massage place by name (case-insensitive match).
+    /// Useful to lazy-load heavy fields (gallery/images) only when needed.
+    /// </summary>
+    [HttpGet("details")]
+    public async Task<ActionResult<MassagePlaceDto>> GetDetails(
+      [FromQuery] string name,
+      [FromQuery] bool includeMainImage = true,
+      [FromQuery] bool includeGallery = true,
+      CancellationToken cancellationToken = default)
+    {
+      if (string.IsNullOrWhiteSpace(name))
+      {
+        return BadRequest(new ApiResponse(400, "Parameter 'name' is required."));
+      }
+
+      if (!System.IO.File.Exists(_catalogFilePath))
+      {
+        _logger.LogWarning("Massage catalog file {FilePath} not found", _catalogFilePath);
+        return NotFound(new ApiResponse(404, "Not found."));
+      }
+
+      try
+      {
+        await using var stream = System.IO.File.OpenRead(_catalogFilePath);
+        var places = await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
+          ?? new List<MassagePlaceDto>();
+
+        var found = places.Find(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (found == null)
+        {
+          return NotFound(new ApiResponse(404, "Not found."));
+        }
+
+        if (includeMainImage && includeGallery)
+        {
+          return Ok(found);
+        }
+
+        return Ok(new MassagePlaceDto
+        {
+          Name = found.Name,
+          City = found.City,
+          Description = found.Description,
+          Rating = found.Rating,
+          MainImage = includeMainImage ? found.MainImage : string.Empty,
+          Gallery = includeGallery ? found.Gallery : Array.Empty<string>(),
+          Attributes = found.Attributes
+        });
+      }
+      catch (JsonException ex)
+      {
+        _logger.LogError(ex, "Invalid massage catalog JSON in {FilePath}", _catalogFilePath);
+        return StatusCode(500, new ApiResponse(500, "Massage catalog JSON is invalid."));
+      }
+      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+      {
+        _logger.LogError(ex, "Unable to read massage catalog file {FilePath}", _catalogFilePath);
+        return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog file."));
+      }
+    }
+
+    [HttpGet("categories")]
+    public ActionResult<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetCategories()
+    {
+      return Ok(MassageCategories);
     }
   }
 }
