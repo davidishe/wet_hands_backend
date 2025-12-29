@@ -14,13 +14,18 @@ namespace WetHands.Core.Models
       Attributes = Array.Empty<string>();
     }
 
+    public required int Id { get; init; }
     public required string Name { get; init; }
+    public int? CountryId { get; init; }
+    public int? CityId { get; init; }
     public string? Country { get; init; }
     public string? City { get; init; }
     public required string Description { get; init; }
     /// <summary>Rating from 0 to 100.</summary>
     public int Rating { get; init; }
-    /// <summary>Base64 image, optional data:image/* prefix.</summary>
+    /// <summary>
+    /// Main image reference (relative/absolute URL).
+    /// </summary>
     public required string MainImage { get; init; }
     public required IReadOnlyList<string> Gallery { get; init; }
     public required IReadOnlyList<string> Attributes { get; init; }

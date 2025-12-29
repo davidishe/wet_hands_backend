@@ -9,6 +9,7 @@ using Core.Models;
 using WetHands.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
+using WetHands.Core.Basic;
 
 namespace Infrastructure.Database.SeedData
 {
@@ -22,35 +23,36 @@ namespace Infrastructure.Database.SeedData
 
         var path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 
-        // /// <summary>
-        // /// seeding countrys
-        // /// </summary>
-        // /// <returns></returns>
-        // if (!context.Countrys.Any())
-        // {
-        //   var itemsData = File.ReadAllText(path + @"/Seed/SeedData/countrys.json");
-        //   var items = JsonSerializer.Deserialize<List<Country>>(itemsData);
-        //   foreach (var item in items)
-        //   {
-        //     context.Countrys.Add(item);
-        //   }
-        //   await context.SaveChangesAsync();
-        // }
+        // Seed country/city catalogs (used by MassagePlaces).
+        var existingCountries = await context.Countries.AsNoTracking().ToListAsync();
+        if (existingCountries.Count == 0)
+        {
+          var itemsData = File.ReadAllText(path + @"/Seed/SeedData/countrys.json");
+          var items = JsonSerializer.Deserialize<List<Country>>(itemsData);
+          if (items != null)
+          {
+            foreach (var item in items)
+            {
+              context.Countries.Add(item);
+            }
+            await context.SaveChangesAsync();
+          }
+        }
 
-        // /// <summary>
-        // /// seeding citys
-        // /// </summary>
-        // /// <returns></returns>
-        // if (!context.City.Any())
-        // {
-        //   var itemsData = File.ReadAllText(path + @"/Seed/SeedData/citys.json");
-        //   var items = JsonSerializer.Deserialize<List<City>>(itemsData);
-        //   foreach (var item in items)
-        //   {
-        //     context.City.Add(item);
-        //   }
-        //   await context.SaveChangesAsync();
-        // }
+        var existingCities = await context.Cities.AsNoTracking().ToListAsync();
+        if (existingCities.Count == 0)
+        {
+          var itemsData = File.ReadAllText(path + @"/Seed/SeedData/citys.json");
+          var items = JsonSerializer.Deserialize<List<City>>(itemsData);
+          if (items != null)
+          {
+            foreach (var item in items)
+            {
+              context.Cities.Add(item);
+            }
+            await context.SaveChangesAsync();
+          }
+        }
 
         // /// <summary>
         // /// adding investors

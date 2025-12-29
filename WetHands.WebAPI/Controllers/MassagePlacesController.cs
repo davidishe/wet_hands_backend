@@ -4,12 +4,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using WetHands.Core.Basic;
 using WetHands.Core.Models;
 using WetHands.Infrastructure.Database;
 using WetHands.Core.Responses;
+using System.IO;
 
 namespace WebAPI.Controllers
 {
@@ -17,6 +20,9 @@ namespace WebAPI.Controllers
   public class MassagePlacesController : BaseApiController
   {
     private readonly IDbRepository<MassagePlace> _massagePlaceRepository;
+    private readonly IDbRepository<MassagePlaceImage> _massagePlaceImageRepository;
+    private readonly IDbRepository<Country> _countryRepository;
+    private readonly IDbRepository<City> _cityRepository;
     private readonly ILogger<MassagePlacesController> _logger;
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> MassageCategories =
@@ -161,9 +167,15 @@ namespace WebAPI.Controllers
 
     public MassagePlacesController(
       IDbRepository<MassagePlace> massagePlaceRepository,
+      IDbRepository<MassagePlaceImage> massagePlaceImageRepository,
+      IDbRepository<Country> countryRepository,
+      IDbRepository<City> cityRepository,
       ILogger<MassagePlacesController> logger)
     {
       _massagePlaceRepository = massagePlaceRepository;
+      _massagePlaceImageRepository = massagePlaceImageRepository;
+      _countryRepository = countryRepository;
+      _cityRepository = cityRepository;
       _logger = logger;
     }
 
@@ -187,6 +199,29 @@ namespace WebAPI.Controllers
       {
         var places = await LoadPlacesOrEmpty(cancellationToken);
 
+        var countryById = await _countryRepository
+          .GetAll()
+          .AsNoTracking()
+          .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+        var cityById = await _cityRepository
+          .GetAll()
+          .AsNoTracking()
+          .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+        var placeIds = places.Select(x => x.Id).ToArray();
+        var images = await _massagePlaceImageRepository
+          .GetAll()
+          .AsNoTracking()
+          .Where(x => placeIds.Contains(x.MassagePlaceId))
+          .OrderByDescending(x => x.IsMain)
+          .ThenByDescending(x => x.EnrolledDate)
+          .ToListAsync(cancellationToken);
+
+        var imagesByPlaceId = images
+          .GroupBy(x => x.MassagePlaceId)
+          .ToDictionary(g => g.Key, g => (IReadOnlyList<MassagePlaceImage>)g.ToList());
+
         var selectedCategories = ParseCsv(categories);
         var countryFilter = Normalize(country);
         var cityFilter = Normalize(city);
@@ -201,7 +236,13 @@ namespace WebAPI.Controllers
         }
 
         var dtos = places
-          .Select(p => ToDto(p, includeMainImage: true, includeGallery: true))
+          .Select(p => ToDto(
+            p,
+            includeMainImage: true,
+            includeGallery: true,
+            countryById,
+            cityById,
+            imagesByPlaceId))
           .ToList();
 
         if (selectedCategories.Count > 0 ||
@@ -248,7 +289,10 @@ namespace WebAPI.Controllers
         {
           projected.Add(new MassagePlaceDto
           {
+            Id = place.Id,
             Name = place.Name ?? string.Empty,
+            CountryId = place.CountryId,
+            CityId = place.CityId,
             Country = place.Country,
             City = place.City,
             Description = place.Description ?? string.Empty,
@@ -293,7 +337,7 @@ namespace WebAPI.Controllers
           return NotFound(new ApiResponse(404, "Not found."));
         }
 
-        var dto = ToDto(found, includeMainImage, includeGallery);
+        var dto = await ToDtoForSingleAsync(found, includeMainImage, includeGallery, cancellationToken);
         return Ok(dto);
       }
       catch (Exception ex)
@@ -303,12 +347,103 @@ namespace WebAPI.Controllers
       }
     }
 
+    /// <summary>
+    /// Returns a single massage place by id (preferred for manager flow).
+    /// </summary>
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<MassagePlaceDto>> GetById(
+      [FromRoute] int id,
+      [FromQuery] bool includeMainImage = true,
+      [FromQuery] bool includeGallery = true,
+      CancellationToken cancellationToken = default)
+    {
+      try
+      {
+        var place = await _massagePlaceRepository
+          .GetAll()
+          .AsNoTracking()
+          .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (place == null)
+        {
+          return NotFound(new ApiResponse(404, "Not found."));
+        }
+
+        var dto = await ToDtoForSingleAsync(place, includeMainImage, includeGallery, cancellationToken);
+        return Ok(dto);
+      }
+      catch (Exception ex)
+      {
+        _logger.LogError(ex, "Unable to read massage place {Id} from database", id);
+        return StatusCode(500, new ApiResponse(500, "Unable to read massage place."));
+      }
+    }
+
+    [HttpGet("countries")]
+    public async Task<ActionResult<IReadOnlyList<Country>>> GetCountries(CancellationToken cancellationToken = default)
+    {
+      var items = await _countryRepository
+        .GetAll()
+        .AsNoTracking()
+        .OrderBy(x => x.Name)
+        .ToListAsync(cancellationToken);
+      return Ok(items);
+    }
+
+    [HttpGet("cities")]
+    public async Task<ActionResult<IReadOnlyList<City>>> GetCities(
+      [FromQuery] int? countryId = null,
+      CancellationToken cancellationToken = default)
+    {
+      var query = _cityRepository.GetAll().AsNoTracking();
+      if (countryId.HasValue)
+      {
+        query = query.Where(x => x.CountryId == countryId.Value);
+      }
+      var items = await query.OrderBy(x => x.Name).ToListAsync(cancellationToken);
+      return Ok(items);
+    }
+
+    [HttpGet("images/{imageId:int}")]
+    public async Task<ActionResult> GetImage(
+      [FromRoute] int imageId,
+      CancellationToken cancellationToken = default)
+    {
+      var image = await _massagePlaceImageRepository
+        .GetAll()
+        .AsNoTracking()
+        .FirstOrDefaultAsync(x => x.Id == imageId, cancellationToken);
+
+      if (image?.DocByte == null || image.DocByte.Length == 0)
+      {
+        return NotFound();
+      }
+
+      var contentType = string.IsNullOrWhiteSpace(image.FileType) ? "application/octet-stream" : image.FileType;
+      return File(image.DocByte, contentType, fileDownloadName: image.FileName);
+    }
+
     [HttpGet("categories")]
     public async Task<ActionResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>> GetCategories(
       CancellationToken cancellationToken = default)
     {
       var places = await LoadPlacesOrEmpty(cancellationToken);
-      var availableTypes = ExtractAvailableAttributes(places.Select(ToDto).ToList());
+      var lightweightDtos = places.Select(p => new MassagePlaceDto
+      {
+        Id = p.Id,
+        Name = p.Name,
+        CountryId = p.CountryId,
+        CityId = p.CityId,
+        Country = p.Country,
+        City = p.City,
+        Description = p.Description,
+        Rating = p.Rating,
+        MainImage = string.Empty,
+        Gallery = Array.Empty<string>(),
+        Attributes = p.Attributes?.ToArray() ?? Array.Empty<string>()
+      }).ToList();
+
+      var availableTypes = ExtractAvailableAttributes(lightweightDtos);
 
       if (availableTypes.Count == 0)
       {
@@ -371,10 +506,7 @@ namespace WebAPI.Controllers
         foreach (var p in places)
         {
           if (p == null) continue;
-          var ctry = string.IsNullOrWhiteSpace(p.Country) ? "Russia" : p.Country.Trim();
-          if (ctry.Length > 0) countries.Add(ctry);
-
-          if (!string.IsNullOrWhiteSpace(p.City)) cities.Add(p.City.Trim());
+          // Categories and rating ranges are derived from actual catalog entries.
 
           min = Math.Min(min, p.Rating);
           max = Math.Max(max, p.Rating);
@@ -390,7 +522,32 @@ namespace WebAPI.Controllers
           }
         }
 
-        var countriesArr = countries.Count == 0 ? new[] { "Russia" } : countries.OrderBy(x => x).ToArray();
+        // Countries/cities are driven by dedicated DB catalogs (seeded).
+        var countryNames = await _countryRepository
+          .GetAll()
+          .AsNoTracking()
+          .Select(x => x.Name)
+          .ToListAsync(cancellationToken);
+
+        foreach (var cn in countryNames)
+        {
+          if (!string.IsNullOrWhiteSpace(cn)) countries.Add(cn.Trim());
+        }
+
+        var cityNames = await _cityRepository
+          .GetAll()
+          .AsNoTracking()
+          .Select(x => x.Name)
+          .ToListAsync(cancellationToken);
+
+        foreach (var ct in cityNames)
+        {
+          if (!string.IsNullOrWhiteSpace(ct)) cities.Add(ct.Trim());
+        }
+
+        if (countries.Count == 0) countries.Add("Russia");
+
+        var countriesArr = countries.OrderBy(x => x).ToArray();
         var citiesArr = cities.OrderBy(x => x).ToArray();
         var categoriesArr = categories.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
 
@@ -418,13 +575,56 @@ namespace WebAPI.Controllers
         .ToListAsync(cancellationToken);
     }
 
-    private static MassagePlaceDto ToDto(MassagePlace place, bool includeMainImage = true, bool includeGallery = true)
+    private async Task<MassagePlaceDto> ToDtoForSingleAsync(
+      MassagePlace place,
+      bool includeMainImage,
+      bool includeGallery,
+      CancellationToken cancellationToken)
+    {
+      var countryById = await _countryRepository
+        .GetAll()
+        .AsNoTracking()
+        .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+      var cityById = await _cityRepository
+        .GetAll()
+        .AsNoTracking()
+        .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+      var images = await _massagePlaceImageRepository
+        .GetAll()
+        .AsNoTracking()
+        .Where(x => x.MassagePlaceId == place.Id)
+        .OrderByDescending(x => x.IsMain)
+        .ThenByDescending(x => x.EnrolledDate)
+        .ToListAsync(cancellationToken);
+
+      var imagesByPlaceId = new Dictionary<int, IReadOnlyList<MassagePlaceImage>>
+      {
+        [place.Id] = images
+      };
+
+      return ToDto(place, includeMainImage, includeGallery, countryById, cityById, imagesByPlaceId);
+    }
+
+    private static string BuildImageUrl(int imageId) => $"/api/MassagePlaces/images/{imageId}";
+
+    private static MassagePlaceDto ToDto(
+      MassagePlace place,
+      bool includeMainImage,
+      bool includeGallery,
+      IReadOnlyDictionary<int, string> countryById,
+      IReadOnlyDictionary<int, string> cityById,
+      IReadOnlyDictionary<int, IReadOnlyList<MassagePlaceImage>> imagesByPlaceId)
     {
       if (place == null)
       {
         return new MassagePlaceDto
         {
+          Id = 0,
           Name = string.Empty,
+          CountryId = null,
+          CityId = null,
           Country = "Russia",
           City = string.Empty,
           Description = string.Empty,
@@ -435,18 +635,41 @@ namespace WebAPI.Controllers
         };
       }
 
-      var effectiveCountry = string.IsNullOrWhiteSpace(place.Country) ? "Russia" : place.Country;
+      var effectiveCountry = place.CountryId.HasValue && countryById.TryGetValue(place.CountryId.Value, out var ctryName)
+        ? ctryName
+        : (string.IsNullOrWhiteSpace(place.Country) ? "Russia" : place.Country);
+
+      var effectiveCity = place.CityId.HasValue && cityById.TryGetValue(place.CityId.Value, out var cityName)
+        ? cityName
+        : place.City;
+
+      var placeImages = imagesByPlaceId.TryGetValue(place.Id, out var imgs)
+        ? imgs
+        : Array.Empty<MassagePlaceImage>();
+
+      var mainImageId = placeImages.FirstOrDefault(x => x.IsMain)?.Id;
+      var galleryUrls = placeImages
+        .Where(x => !x.IsMain)
+        .Select(x => BuildImageUrl(x.Id))
+        .ToArray();
 
       return new MassagePlaceDto
       {
+        Id = place.Id,
         Name = place.Name,
+        CountryId = place.CountryId,
+        CityId = place.CityId,
         Country = effectiveCountry,
-        City = place.City,
+        City = effectiveCity,
         Description = place.Description,
         Rating = place.Rating,
-        MainImage = includeMainImage ? place.MainImage : string.Empty,
-        Gallery = includeGallery ? place.Gallery : Array.Empty<string>(),
-        Attributes = place.Attributes ?? Array.Empty<string>()
+        MainImage = includeMainImage && mainImageId.HasValue
+          ? BuildImageUrl(mainImageId.Value)
+          : string.Empty,
+        Gallery = includeGallery
+          ? galleryUrls
+          : Array.Empty<string>(),
+        Attributes = place.Attributes?.ToArray() ?? Array.Empty<string>()
       };
     }
 

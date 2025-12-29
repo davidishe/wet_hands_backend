@@ -11,6 +11,7 @@ using WetHands.Core.Models;
 using WetHands.Core.Models.Items;
 using WetHands.Core.TonModels;
 using WetHands.Core;
+using WetHands.Core.Basic;
 
 namespace WetHands.Infrastructure.Database
 {
@@ -38,6 +39,7 @@ namespace WetHands.Infrastructure.Database
     public DbSet<OrderItemType> OrderItemTypes { get; set; }
 
     public DbSet<MassagePlace> MassagePlaces { get; set; }
+    public DbSet<MassagePlaceImage> MassagePlaceImages { get; set; }
 
     public DbSet<Picture> Pictures { get; set; }
     public DbSet<File> Files { get; set; }
@@ -46,6 +48,8 @@ namespace WetHands.Infrastructure.Database
     public DbSet<NftSellRequest> NftSellRequests { get; set; }
     public DbSet<OrderStatus> OrderStatuses { get; set; }
     public DbSet<ServiceType> ServiceTypes { get; set; }
+    public DbSet<Country> Countries { get; set; }
+    public DbSet<City> Cities { get; set; }
 
 
 
@@ -66,9 +70,11 @@ namespace WetHands.Infrastructure.Database
         entity.Property(p => p.Name).IsRequired().HasMaxLength(256);
         entity.Property(p => p.Country).HasMaxLength(128);
         entity.Property(p => p.City).HasMaxLength(128);
+        entity.Property(p => p.CountryId);
+        entity.Property(p => p.CityId);
         entity.Property(p => p.Description).IsRequired();
         entity.Property(p => p.Rating).HasDefaultValue(0);
-        entity.Property(p => p.MainImage).IsRequired();
+        entity.Property(p => p.MainImage);
 
         entity.Property(p => p.Gallery)
           .HasConversion(listToJsonConverter)
@@ -77,6 +83,26 @@ namespace WetHands.Infrastructure.Database
         entity.Property(p => p.Attributes)
           .HasConversion(listToJsonConverter)
           .Metadata.SetValueComparer(listComparer);
+      });
+
+      modelBuilder.Entity<MassagePlaceImage>(entity =>
+      {
+        entity.HasIndex(x => new { x.MassagePlaceId, x.IsMain });
+        entity.Property(x => x.FileName).HasMaxLength(256);
+        entity.Property(x => x.FileType).HasMaxLength(128);
+      });
+
+      modelBuilder.Entity<Country>(entity =>
+      {
+        entity.HasIndex(x => x.Name).IsUnique();
+        entity.Property(x => x.Name).IsRequired().HasMaxLength(128);
+        entity.Property(x => x.CountryIconPath).HasMaxLength(128);
+      });
+
+      modelBuilder.Entity<City>(entity =>
+      {
+        entity.HasIndex(x => new { x.CountryId, x.Name }).IsUnique();
+        entity.Property(x => x.Name).IsRequired().HasMaxLength(128);
       });
 
       modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());

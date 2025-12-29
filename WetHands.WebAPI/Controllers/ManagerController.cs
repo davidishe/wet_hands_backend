@@ -9,19 +9,31 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WetHands.Core.Models;
 using WetHands.Infrastructure.Database;
+using WetHands.Core.Basic;
+using Microsoft.AspNetCore.Http;
+using System.IO;
 
 namespace WebAPI.Controllers
 {
   public class ManagerController : BaseApiController
   {
     private readonly IDbRepository<MassagePlace> _massagePlaceRepository;
+    private readonly IDbRepository<MassagePlaceImage> _massagePlaceImageRepository;
+    private readonly IDbRepository<Country> _countryRepository;
+    private readonly IDbRepository<City> _cityRepository;
     private readonly ILogger<ManagerController> _logger;
 
     public ManagerController(
       IDbRepository<MassagePlace> massagePlaceRepository,
+      IDbRepository<MassagePlaceImage> massagePlaceImageRepository,
+      IDbRepository<Country> countryRepository,
+      IDbRepository<City> cityRepository,
       ILogger<ManagerController> logger)
     {
       _massagePlaceRepository = massagePlaceRepository;
+      _massagePlaceImageRepository = massagePlaceImageRepository;
+      _countryRepository = countryRepository;
+      _cityRepository = cityRepository;
       _logger = logger;
     }
 
@@ -35,6 +47,13 @@ namespace WebAPI.Controllers
         return BadRequest(ModelState);
       }
 
+      // Reject legacy base64 image payloads. Use multipart endpoints instead.
+      if (!string.IsNullOrWhiteSpace(request.MainImage) ||
+          (request.Gallery != null && request.Gallery.Any(x => !string.IsNullOrWhiteSpace(x))))
+      {
+        return BadRequest("Images must be uploaded as files via POST /api/manager/catalog/{id}/images (multipart/form-data).");
+      }
+
       var normalizedName = request.Name.Trim();
       var exists = await _massagePlaceRepository
         .GetAll()
@@ -46,15 +65,20 @@ namespace WebAPI.Controllers
         return Conflict($"Massage place with name '{normalizedName}' already exists.");
       }
 
+      var resolved = await ResolveCountryCityAsync(request, cancellationToken);
+
       var entity = new MassagePlace
       {
         Name = normalizedName,
-        Country = request.Country?.Trim(),
-        City = request.City?.Trim(),
+        CountryId = resolved.CountryId,
+        CityId = resolved.CityId,
+        Country = resolved.CountryName,
+        City = resolved.CityName,
         Description = request.Description.Trim(),
         Rating = Math.Clamp(request.Rating, 0, 100),
-        MainImage = request.MainImage,
-        Gallery = NormalizeList(request.Gallery),
+        // Images are stored in MassagePlaceImages, not in legacy base64 fields.
+        MainImage = null,
+        Gallery = new List<string>(),
         Attributes = NormalizeList(request.Attributes)
       };
 
@@ -65,7 +89,7 @@ namespace WebAPI.Controllers
           nameof(MassagePlacesController.GetDetails),
           "MassagePlaces",
           new { name = created.Name },
-          ToDto(created));
+          await ToDtoAsync(created.Id, cancellationToken));
       }
       catch (Exception ex)
       {
@@ -85,6 +109,13 @@ namespace WebAPI.Controllers
         return BadRequest(ModelState);
       }
 
+      // Reject legacy base64 image payloads. Use multipart endpoints instead.
+      if (!string.IsNullOrWhiteSpace(request.MainImage) ||
+          (request.Gallery != null && request.Gallery.Any(x => !string.IsNullOrWhiteSpace(x))))
+      {
+        return BadRequest("Images must be uploaded as files via POST /api/manager/catalog/{id}/images (multipart/form-data).");
+      }
+
       var existing = await _massagePlaceRepository.GetByIdAsync(id);
       if (existing == null)
       {
@@ -102,19 +133,22 @@ namespace WebAPI.Controllers
         return Conflict($"Massage place with name '{normalizedName}' already exists.");
       }
 
+      var resolved = await ResolveCountryCityAsync(request, cancellationToken);
+
       existing.Name = normalizedName;
-      existing.Country = request.Country?.Trim();
-      existing.City = request.City?.Trim();
+      existing.CountryId = resolved.CountryId;
+      existing.CityId = resolved.CityId;
+      existing.Country = resolved.CountryName;
+      existing.City = resolved.CityName;
       existing.Description = request.Description.Trim();
       existing.Rating = Math.Clamp(request.Rating, 0, 100);
-      existing.MainImage = request.MainImage;
-      existing.Gallery = NormalizeList(request.Gallery);
+      // Images are stored in MassagePlaceImages, not in legacy base64 fields.
       existing.Attributes = NormalizeList(request.Attributes);
 
       try
       {
         await _massagePlaceRepository.UpdateAsync(existing);
-        return Ok(ToDto(existing));
+        return Ok(await ToDtoAsync(existing.Id, cancellationToken));
       }
       catch (Exception ex)
       {
@@ -123,18 +157,195 @@ namespace WebAPI.Controllers
       }
     }
 
-    private static MassagePlaceDto ToDto(MassagePlace place)
+    [HttpPost("catalog/{id:int}/images")]
+    public async Task<ActionResult<MassagePlaceDto>> UploadImages(
+      [FromRoute] int id,
+      CancellationToken cancellationToken = default)
     {
-      var effectiveCountry = string.IsNullOrWhiteSpace(place.Country) ? "Russia" : place.Country;
+      var place = await _massagePlaceRepository.GetByIdAsync(id);
+      if (place == null) return NotFound();
+
+      var files = Request.Form.Files;
+      if (files == null || files.Count == 0)
+      {
+        return BadRequest("No files uploaded.");
+      }
+
+      var created = new List<MassagePlaceImage>();
+
+      foreach (var file in files)
+      {
+        if (file.Length <= 0) continue;
+        using var memoryStream = new MemoryStream();
+        await file.CopyToAsync(memoryStream, cancellationToken);
+        var bytes = memoryStream.ToArray();
+        var img = new MassagePlaceImage
+        {
+          MassagePlaceId = id,
+          IsMain = false,
+          EnrolledDate = DateTime.UtcNow,
+          FileName = file.FileName,
+          FileType = file.ContentType,
+          DocByte = bytes,
+          Size = bytes.Length
+        };
+        var createdImg = await _massagePlaceImageRepository.AddAsync(img);
+        created.Add(createdImg);
+      }
+
+      // Ensure there is a main image.
+      var existingImages = await _massagePlaceImageRepository
+        .GetAll()
+        .Where(x => x.MassagePlaceId == id)
+        .ToListAsync(cancellationToken);
+
+      var hasMain = existingImages.Any(x => x.IsMain);
+
+      int? mainIndex = null;
+      if (Request.Form.TryGetValue("mainIndex", out var mainIndexRaw))
+      {
+        if (int.TryParse(mainIndexRaw.ToString(), out var idx))
+        {
+          mainIndex = idx;
+        }
+      }
+
+      if (mainIndex.HasValue && mainIndex.Value >= 0 && mainIndex.Value < created.Count)
+      {
+        await SetMainInternalAsync(id, created[mainIndex.Value].Id, cancellationToken);
+      }
+      else if (!hasMain && existingImages.Count > 0)
+      {
+        await SetMainInternalAsync(id, existingImages[0].Id, cancellationToken);
+      }
+
+      return Ok(await ToDtoAsync(id, cancellationToken));
+    }
+
+    [HttpPut("catalog/{placeId:int}/images/{imageId:int}/main")]
+    public async Task<ActionResult<MassagePlaceDto>> SetMainImage(
+      [FromRoute] int placeId,
+      [FromRoute] int imageId,
+      CancellationToken cancellationToken = default)
+    {
+      var place = await _massagePlaceRepository.GetByIdAsync(placeId);
+      if (place == null) return NotFound();
+
+      var img = await _massagePlaceImageRepository
+        .GetAll()
+        .FirstOrDefaultAsync(x => x.Id == imageId && x.MassagePlaceId == placeId, cancellationToken);
+      if (img == null) return NotFound();
+
+      await SetMainInternalAsync(placeId, imageId, cancellationToken);
+      return Ok(await ToDtoAsync(placeId, cancellationToken));
+    }
+
+    [HttpDelete("catalog/{placeId:int}/images/{imageId:int}")]
+    public async Task<ActionResult<MassagePlaceDto>> DeleteImage(
+      [FromRoute] int placeId,
+      [FromRoute] int imageId,
+      CancellationToken cancellationToken = default)
+    {
+      var img = await _massagePlaceImageRepository
+        .GetAll()
+        .FirstOrDefaultAsync(x => x.Id == imageId && x.MassagePlaceId == placeId, cancellationToken);
+      if (img == null) return NotFound();
+
+      await _massagePlaceImageRepository.DeleteAsync(img);
+
+      // If main deleted, pick another as main.
+      var remaining = await _massagePlaceImageRepository
+        .GetAll()
+        .Where(x => x.MassagePlaceId == placeId)
+        .OrderByDescending(x => x.EnrolledDate)
+        .ToListAsync(cancellationToken);
+      if (remaining.Count > 0 && !remaining.Any(x => x.IsMain))
+      {
+        await SetMainInternalAsync(placeId, remaining[0].Id, cancellationToken);
+      }
+
+      return Ok(await ToDtoAsync(placeId, cancellationToken));
+    }
+
+    private async Task SetMainInternalAsync(int placeId, int imageId, CancellationToken cancellationToken)
+    {
+      var imgs = await _massagePlaceImageRepository
+        .GetAll()
+        .Where(x => x.MassagePlaceId == placeId)
+        .ToListAsync(cancellationToken);
+
+      foreach (var img in imgs)
+      {
+        var desired = img.Id == imageId;
+        if (img.IsMain != desired)
+        {
+          img.IsMain = desired;
+          await _massagePlaceImageRepository.UpdateAsync(img);
+        }
+      }
+    }
+
+    private static string BuildImageUrl(int imageId) => $"/api/MassagePlaces/images/{imageId}";
+
+    private async Task<MassagePlaceDto> ToDtoAsync(int placeId, CancellationToken cancellationToken)
+    {
+      var place = await _massagePlaceRepository
+        .GetAll()
+        .AsNoTracking()
+        .FirstOrDefaultAsync(x => x.Id == placeId, cancellationToken);
+
+      if (place == null)
+      {
+        return new MassagePlaceDto
+        {
+          Id = 0,
+          Name = string.Empty,
+          CountryId = null,
+          CityId = null,
+          Country = "Russia",
+          City = string.Empty,
+          Description = string.Empty,
+          Rating = 0,
+          MainImage = string.Empty,
+          Gallery = Array.Empty<string>(),
+          Attributes = Array.Empty<string>()
+        };
+      }
+
+      var countries = await _countryRepository.GetAll().AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+      var cities = await _cityRepository.GetAll().AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+      var effectiveCountry = place.CountryId.HasValue && countries.TryGetValue(place.CountryId.Value, out var ctryName)
+        ? ctryName
+        : (string.IsNullOrWhiteSpace(place.Country) ? "Russia" : place.Country);
+
+      var effectiveCity = place.CityId.HasValue && cities.TryGetValue(place.CityId.Value, out var cityName)
+        ? cityName
+        : place.City;
+
+      var imgs = await _massagePlaceImageRepository
+        .GetAll()
+        .AsNoTracking()
+        .Where(x => x.MassagePlaceId == placeId)
+        .OrderByDescending(x => x.IsMain)
+        .ThenByDescending(x => x.EnrolledDate)
+        .ToListAsync(cancellationToken);
+
+      var mainId = imgs.FirstOrDefault(x => x.IsMain)?.Id;
+      var galleryUrls = imgs.Where(x => !x.IsMain).Select(x => BuildImageUrl(x.Id)).ToArray();
+
       return new MassagePlaceDto
       {
+        Id = place.Id,
         Name = place.Name,
+        CountryId = place.CountryId,
+        CityId = place.CityId,
         Country = effectiveCountry,
-        City = place.City,
+        City = effectiveCity,
         Description = place.Description,
         Rating = place.Rating,
-        MainImage = place.MainImage,
-        Gallery = place.Gallery ?? new List<string>(),
+        MainImage = mainId.HasValue ? BuildImageUrl(mainId.Value) : string.Empty,
+        Gallery = galleryUrls,
         Attributes = place.Attributes ?? new List<string>()
       };
     }
@@ -154,11 +365,14 @@ namespace WebAPI.Controllers
       [MaxLength(256)]
       public required string Name { get; init; }
 
-      [MaxLength(128)]
-      public string? Country { get; init; }
+      public int? CountryId { get; init; }
+      public int? CityId { get; init; }
 
       [MaxLength(128)]
-      public string? City { get; init; }
+      public string? Country { get; init; } // legacy
+
+      [MaxLength(128)]
+      public string? City { get; init; } // legacy
 
       [Required]
       public required string Description { get; init; }
@@ -166,12 +380,73 @@ namespace WebAPI.Controllers
       [Range(0, 100)]
       public int Rating { get; init; }
 
-      [Required]
-      public required string MainImage { get; init; }
+      // Legacy fields (base64) are rejected; upload images via multipart endpoints.
+      public string? MainImage { get; init; }
 
+      // Legacy fields (base64) are rejected; upload images via multipart endpoints.
       public IReadOnlyList<string>? Gallery { get; init; }
 
       public IReadOnlyList<string>? Attributes { get; init; }
+    }
+
+    private async Task<(int? CountryId, int? CityId, string? CountryName, string? CityName)> ResolveCountryCityAsync(
+      MassagePlaceUpsertRequest request,
+      CancellationToken cancellationToken)
+    {
+      int? countryId = request.CountryId;
+      int? cityId = request.CityId;
+      string? countryName = request.Country?.Trim();
+      string? cityName = request.City?.Trim();
+
+      if (countryId.HasValue)
+      {
+        var c = await _countryRepository.GetByIdAsync(countryId.Value);
+        if (c != null)
+        {
+          countryName = c.Name;
+        }
+      }
+      else if (!string.IsNullOrWhiteSpace(countryName))
+      {
+        var c = await _countryRepository
+          .GetAll()
+          .AsNoTracking()
+          .FirstOrDefaultAsync(x => x.Name == countryName, cancellationToken);
+        if (c != null)
+        {
+          countryId = c.Id;
+          countryName = c.Name;
+        }
+      }
+
+      if (cityId.HasValue)
+      {
+        var ct = await _cityRepository.GetByIdAsync(cityId.Value);
+        if (ct != null)
+        {
+          cityName = ct.Name;
+          // Align country if not provided.
+          if (!countryId.HasValue)
+          {
+            countryId = ct.CountryId;
+            var c = await _countryRepository.GetByIdAsync(countryId.Value);
+            if (c != null) countryName = c.Name;
+          }
+        }
+      }
+      else if (!string.IsNullOrWhiteSpace(cityName))
+      {
+        var q = _cityRepository.GetAll().AsNoTracking().Where(x => x.Name == cityName);
+        if (countryId.HasValue) q = q.Where(x => x.CountryId == countryId.Value);
+        var ct = await q.FirstOrDefaultAsync(cancellationToken);
+        if (ct != null)
+        {
+          cityId = ct.Id;
+          cityName = ct.Name;
+        }
+      }
+
+      return (countryId, cityId, countryName, cityName);
     }
   }
 }

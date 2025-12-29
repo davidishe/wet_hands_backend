@@ -108,6 +108,9 @@ namespace WebAPI
       services.AddScoped<IDbRepository<OrderItem>, DbRepository<OrderItem>>();
       services.AddScoped<IDbRepository<OrderItemType>, DbRepository<OrderItemType>>();
       services.AddScoped<IDbRepository<MassagePlace>, DbRepository<MassagePlace>>();
+      services.AddScoped<IDbRepository<MassagePlaceImage>, DbRepository<MassagePlaceImage>>();
+      services.AddScoped<IDbRepository<Country>, DbRepository<Country>>();
+      services.AddScoped<IDbRepository<City>, DbRepository<City>>();
       services.AddScoped<IAuthService, AuthService>();
 
 

@@ -16,14 +16,26 @@ namespace WetHands.Core.Models
     [MaxLength(128)]
     public string? City { get; set; }
 
+    /// <summary>
+    /// Optional link to a catalog country row.
+    /// </summary>
+    public int? CountryId { get; set; }
+
+    /// <summary>
+    /// Optional link to a catalog city row.
+    /// </summary>
+    public int? CityId { get; set; }
+
     [Required]
     public string Description { get; set; }
 
     [Range(0, 100)]
     public int Rating { get; set; }
 
-    [Required]
-    public string MainImage { get; set; }
+    /// <summary>
+    /// Legacy field (was base64). Prefer <see cref="MassagePlaceImage"/> records.
+    /// </summary>
+    public string? MainImage { get; set; }
 
     public List<string> Gallery { get; set; } = new();
 
