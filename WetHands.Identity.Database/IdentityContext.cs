@@ -11,9 +11,8 @@ namespace WetHands.Identity.Database
   {
     public IdentityContext(DbContextOptions<IdentityContext> options) : base(options)
     {
-      // The project historically shipped without EF Core migrations (see AppDbContext).
-      // Ensure the Identity schema exists (AspNetUsers/AspNetRoles/...) to avoid runtime 500s.
-      Database.EnsureCreated();
+      // Intentionally empty: schema bootstrap is handled explicitly during WebAPI startup
+      // so we can log connection details and fail fast if the server user lacks DDL rights.
     }
 
     public DbSet<RefreshToken> RefreshTokens { get; set; }
