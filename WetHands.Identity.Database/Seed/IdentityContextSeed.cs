@@ -67,8 +67,12 @@ namespace Identity.Database.SeedData
             await roleManager.CreateAsync(role);
           }
 
-          var admin = userManager.FindByNameAsync("david.akobiya@gmail.com").Result;
-          await userManager.AddToRolesAsync(admin, new[] { "Admin", "User", "Moderator" });
+          // Optional bootstrap: if an admin user exists, grant roles.
+          var admin = await userManager.FindByNameAsync("david.akobiya@gmail.com");
+          if (admin != null)
+          {
+            await userManager.AddToRolesAsync(admin, new[] { "Admin", "User", "Moderator" });
+          }
 
         }
 

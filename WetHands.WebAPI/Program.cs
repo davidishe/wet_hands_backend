@@ -34,12 +34,15 @@ namespace WebAPI
           var roleManager = services.GetRequiredService<RoleManager<Role>>();
           var identityContext = services.GetRequiredService<IdentityContext>();
 
+          // This solution ships without EF Core migrations. MigrateAsync() would create an empty database,
+          // but it would NOT create Identity tables (AspNetUsers, AspNetRoles, ...), leading to 500 errors.
+          // EnsureCreated creates the schema from the current model when it is missing.
+          await identityContext.Database.EnsureCreatedAsync();
           await IdentityContextSeed.SeedUsersAsync(userManager, roleManager, loggerFactory, identityContext);
-          await identityContext.Database.MigrateAsync();
 
           var context = services.GetRequiredService<AppDbContext>();
+          await context.Database.EnsureCreatedAsync();
           await DataContextSeed.SeedDataAsync(context, loggerFactory);
-          await context.Database.MigrateAsync();
 
         }
         catch (Exception ex)
