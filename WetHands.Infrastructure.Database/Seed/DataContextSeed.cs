@@ -21,6 +21,8 @@ namespace Infrastructure.Database.SeedData
       try
       {
 
+        await EnsureMassageCatalogSchemaAsync(context);
+
         var path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 
         // Seed country/city catalogs (used by MassagePlaces).
@@ -318,6 +320,74 @@ namespace Infrastructure.Database.SeedData
         var logger = loggerFactory.CreateLogger<DataContextSeed>();
         logger.LogError(ex.Message);
       }
+    }
+
+    /// <summary>
+    /// This project historically shipped without EF Core migrations and relied on EnsureCreated().
+    /// EnsureCreated() does not update existing schemas, so we patch required tables/columns
+    /// for the massage catalog on startup to avoid 500 errors in production.
+    /// </summary>
+    private static async Task EnsureMassageCatalogSchemaAsync(AppDbContext context)
+    {
+      // SQL Server dialect.
+      // Create Countries/Cities/MassagePlaceImages tables if missing.
+      // Add missing columns to MassagePlaces and relax MainImage nullability (legacy was NOT NULL base64).
+      var sql = @"
+IF OBJECT_ID(N'[dbo].[Countries]', 'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[Countries] (
+    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [Name] NVARCHAR(128) NOT NULL,
+    [CountryIconPath] NVARCHAR(128) NULL
+  );
+  CREATE UNIQUE INDEX IX_Countries_Name ON [dbo].[Countries]([Name]);
+END;
+
+IF OBJECT_ID(N'[dbo].[Cities]', 'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[Cities] (
+    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [Name] NVARCHAR(128) NOT NULL,
+    [CountryId] INT NOT NULL
+  );
+  CREATE UNIQUE INDEX IX_Cities_CountryId_Name ON [dbo].[Cities]([CountryId], [Name]);
+END;
+
+IF OBJECT_ID(N'[dbo].[MassagePlaceImages]', 'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[MassagePlaceImages] (
+    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [MassagePlaceId] INT NOT NULL,
+    [IsMain] BIT NOT NULL CONSTRAINT DF_MassagePlaceImages_IsMain DEFAULT(0),
+    [EnrolledDate] DATETIME2 NOT NULL CONSTRAINT DF_MassagePlaceImages_EnrolledDate DEFAULT(SYSUTCDATETIME()),
+    [FileName] NVARCHAR(256) NULL,
+    [FileType] NVARCHAR(128) NULL,
+    [DocByte] VARBINARY(MAX) NULL,
+    [Size] INT NULL
+  );
+  CREATE INDEX IX_MassagePlaceImages_MassagePlaceId_IsMain ON [dbo].[MassagePlaceImages]([MassagePlaceId], [IsMain]);
+END;
+
+IF COL_LENGTH('dbo.MassagePlaces', 'CountryId') IS NULL
+BEGIN
+  ALTER TABLE [dbo].[MassagePlaces] ADD [CountryId] INT NULL;
+END;
+
+IF COL_LENGTH('dbo.MassagePlaces', 'CityId') IS NULL
+BEGIN
+  ALTER TABLE [dbo].[MassagePlaces] ADD [CityId] INT NULL;
+END;
+
+BEGIN TRY
+  -- Legacy schema had MainImage NOT NULL (base64). Make it nullable.
+  ALTER TABLE [dbo].[MassagePlaces] ALTER COLUMN [MainImage] NVARCHAR(MAX) NULL;
+END TRY
+BEGIN CATCH
+  -- Ignore if column does not exist or type differs.
+END CATCH;
+";
+
+      await context.Database.ExecuteSqlRawAsync(sql);
     }
 
 
