@@ -552,28 +552,45 @@ namespace WebAPI.Controllers
     private static bool MatchesQuery(MassagePlaceDto place, string q)
     {
       if (place == null) return false;
-      if (string.IsNullOrWhiteSpace(q)) return true;
+      var query = (q ?? string.Empty).Trim();
+      if (query.Length == 0) return true;
 
+      // Support both phrase search (full query) and token search (words),
+      // so description is reliably matched even when the user types multiple words.
+      foreach (var token in TokenizeQuery(query))
+      {
+        if (token.Length == 0) continue;
+        if (MatchesQueryToken(place, token)) return true;
+      }
+
+      // As a fallback, try the full query as-is (useful for phrases).
+      return MatchesQueryToken(place, query);
+    }
+
+    private static bool MatchesQueryToken(MassagePlaceDto place, string token)
+    {
       if (!string.IsNullOrWhiteSpace(place.Name) &&
-          place.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
+          place.Name.Contains(token, StringComparison.OrdinalIgnoreCase))
       {
         return true;
       }
 
       if (!string.IsNullOrWhiteSpace(place.City) &&
-          place.City.Contains(q, StringComparison.OrdinalIgnoreCase))
+          place.City.Contains(token, StringComparison.OrdinalIgnoreCase))
       {
         return true;
       }
 
-      if (!string.IsNullOrWhiteSpace(place.Country) &&
-          place.Country.Contains(q, StringComparison.OrdinalIgnoreCase))
+      var effectiveCountry = string.IsNullOrWhiteSpace(place.Country) ? "Russia" : place.Country;
+      if (!string.IsNullOrWhiteSpace(effectiveCountry) &&
+          effectiveCountry.Contains(token, StringComparison.OrdinalIgnoreCase))
       {
         return true;
       }
 
+      // IMPORTANT: include description in search.
       if (!string.IsNullOrWhiteSpace(place.Description) &&
-          place.Description.Contains(q, StringComparison.OrdinalIgnoreCase))
+          place.Description.Contains(token, StringComparison.OrdinalIgnoreCase))
       {
         return true;
       }
@@ -584,11 +601,29 @@ namespace WebAPI.Controllers
         foreach (var attr in attrs)
         {
           if (string.IsNullOrWhiteSpace(attr)) continue;
-          if (attr.Contains(q, StringComparison.OrdinalIgnoreCase)) return true;
+          if (attr.Contains(token, StringComparison.OrdinalIgnoreCase)) return true;
         }
       }
 
       return false;
+    }
+
+    private static IEnumerable<string> TokenizeQuery(string query)
+    {
+      // Split by whitespace and common separators. Keep it simple and allocation-light.
+      // Example: "thai, oil-massage" -> ["thai", "oil", "massage"]
+      return query
+        .Split(new[]
+        {
+          ' ', '\t', '\r', '\n',
+          ',', '.', ';', ':', '!', '?',
+          '(', ')', '[', ']', '{', '}',
+          '/', '\\', '|',
+          '-', '_',
+          '"', '\'', '«', '»'
+        }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Where(x => !string.IsNullOrWhiteSpace(x))
+        .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     private static bool MatchesFilters(
