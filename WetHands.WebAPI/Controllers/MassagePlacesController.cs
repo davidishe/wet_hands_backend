@@ -388,9 +388,54 @@ namespace WebAPI.Controllers
     }
 
     [HttpGet("categories")]
-    public ActionResult<IReadOnlyDictionary<string, IReadOnlyList<string>>> GetCategories()
+    public async Task<ActionResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>> GetCategories(
+      CancellationToken cancellationToken = default)
     {
-      return Ok(MassageCategories);
+      var places = await LoadPlacesOrEmpty(cancellationToken);
+      var availableTypes = ExtractAvailableAttributes(places);
+
+      if (availableTypes.Count == 0)
+      {
+        return Ok(new Dictionary<string, IReadOnlyList<string>>
+        {
+          ["Другое"] = Array.Empty<string>()
+        });
+      }
+
+      // Filter predefined groups to only types that are actually present in the catalog.
+      var covered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      var result = new Dictionary<string, IReadOnlyList<string>>();
+
+      foreach (var group in MassageCategories)
+      {
+        var filtered = group.Value
+          .Where(t => availableTypes.ContainsKey(NormalizeKey(t)))
+          .Select(NormalizeLabel)
+          .Where(t => !string.IsNullOrWhiteSpace(t))
+          .Distinct(StringComparer.OrdinalIgnoreCase)
+          .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+          .ToArray();
+
+        if (filtered.Length == 0) continue;
+
+        foreach (var t in filtered) covered.Add(NormalizeKey(t));
+        result[group.Key] = filtered;
+      }
+
+      // Everything else goes to "Other".
+      var other = availableTypes
+        .Keys
+        .Where(k => !covered.Contains(k))
+        .Select(k => availableTypes[k])
+        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+      if (other.Length > 0 || result.Count == 0)
+      {
+        result["Другое"] = other;
+      }
+
+      return Ok(result);
     }
 
     [HttpGet("filterOptions")]
@@ -404,7 +449,7 @@ namespace WebAPI.Controllers
         {
           Countries = new[] { "Russia" },
           Cities = Array.Empty<string>(),
-          Categories = MassageCategories.Keys.ToArray(),
+          Categories = Array.Empty<string>(),
           MinRating = 0,
           MaxRating = 100
         });
@@ -412,12 +457,11 @@ namespace WebAPI.Controllers
 
       try
       {
-        await using var stream = System.IO.File.OpenRead(_catalogFilePath);
-        var places = await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
-          ?? new List<MassagePlaceDto>();
+        var places = await LoadPlacesOrEmpty(cancellationToken);
 
         var countries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var cities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var min = 100;
         var max = 0;
 
@@ -431,16 +475,27 @@ namespace WebAPI.Controllers
 
           min = Math.Min(min, p.Rating);
           max = Math.Max(max, p.Rating);
+
+          var attrs = p.Attributes;
+          if (attrs != null)
+          {
+            foreach (var a in attrs)
+            {
+              var label = NormalizeLabel(a);
+              if (!string.IsNullOrWhiteSpace(label)) categories.Add(label);
+            }
+          }
         }
 
         var countriesArr = countries.Count == 0 ? new[] { "Russia" } : countries.OrderBy(x => x).ToArray();
         var citiesArr = cities.OrderBy(x => x).ToArray();
+        var categoriesArr = categories.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
 
         return Ok(new MassagePlaceFilterOptionsResponse
         {
           Countries = countriesArr,
           Cities = citiesArr,
-          Categories = MassageCategories.Keys.ToArray(),
+          Categories = categoriesArr,
           MinRating = Math.Clamp(min, 0, 100),
           MaxRating = Math.Clamp(max, 0, 100)
         });
@@ -455,6 +510,43 @@ namespace WebAPI.Controllers
         _logger.LogError(ex, "Unable to read massage catalog file {FilePath}", _catalogFilePath);
         return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog file."));
       }
+    }
+
+    private async Task<List<MassagePlaceDto>> LoadPlacesOrEmpty(CancellationToken cancellationToken)
+    {
+      if (!System.IO.File.Exists(_catalogFilePath)) return new List<MassagePlaceDto>();
+
+      await using var stream = System.IO.File.OpenRead(_catalogFilePath);
+      return await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
+        ?? new List<MassagePlaceDto>();
+    }
+
+    private static string NormalizeKey(string? value)
+    {
+      return (value ?? string.Empty).Trim();
+    }
+
+    private static string NormalizeLabel(string? value)
+    {
+      return (value ?? string.Empty).Trim();
+    }
+
+    private static Dictionary<string, string> ExtractAvailableAttributes(IEnumerable<MassagePlaceDto> places)
+    {
+      // key => canonical label
+      var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+      foreach (var p in places)
+      {
+        if (p?.Attributes == null) continue;
+        foreach (var raw in p.Attributes)
+        {
+          var label = NormalizeLabel(raw);
+          if (string.IsNullOrWhiteSpace(label)) continue;
+          var key = NormalizeKey(label);
+          map.TryAdd(key, label);
+        }
+      }
+      return map;
     }
 
     private static bool MatchesQuery(MassagePlaceDto place, string q)
@@ -532,22 +624,38 @@ namespace WebAPI.Controllers
 
       if (selectedCategories.Count > 0)
       {
-        // Category match: place has at least one attribute belonging to any selected category.
+        // Flexible matching:
+        // - If an item matches a category name (from `MassageCategories`), treat it as a category filter.
+        // - Otherwise treat it as a concrete service/type (i.e. a place attribute).
         var attrs = place.Attributes ?? Array.Empty<string>();
         var hasAny = false;
 
-        foreach (var category in selectedCategories)
+        foreach (var item in selectedCategories)
         {
-          if (!MassageCategories.TryGetValue(category, out var types) || types == null) continue;
-
-          foreach (var attr in attrs)
+          if (MassageCategories.TryGetValue(item, out var types) && types != null)
           {
-            if (string.IsNullOrWhiteSpace(attr)) continue;
-            // Exact match to avoid accidental substring matches.
-            if (types.Contains(attr))
+            foreach (var attr in attrs)
             {
-              hasAny = true;
-              break;
+              if (string.IsNullOrWhiteSpace(attr)) continue;
+              // Exact match (trim + ignore case) to avoid accidental substring matches.
+              if (types.Any(t => string.Equals(NormalizeLabel(t), NormalizeLabel(attr), StringComparison.OrdinalIgnoreCase)))
+              {
+                hasAny = true;
+                break;
+              }
+            }
+          }
+          else
+          {
+            // Exact match against attributes (service/type).
+            foreach (var attr in attrs)
+            {
+              if (string.IsNullOrWhiteSpace(attr)) continue;
+              if (string.Equals(NormalizeLabel(attr), NormalizeLabel(item), StringComparison.OrdinalIgnoreCase))
+              {
+                hasAny = true;
+                break;
+              }
             }
           }
 
