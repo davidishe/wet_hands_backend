@@ -160,7 +160,7 @@ namespace WetHands.Infrastructure.Documents
           {
             ["{{ItemIndex}}"] = index++.ToString(),
             ["{{ItemName}}"] = item.Name ?? "—",
-            ["{{QtyDirty}}"] = (item.QtyDirty ?? 0).ToString(),
+            ["{{QtyDirty}}"] = item.QtyDirty.ToString(),
             ["{{QtyClean}}"] = (item.QtyClean ?? 0).ToString(),
             ["{{ItemNote}}"] = item.CommentText ?? string.Empty
           });
@@ -322,7 +322,7 @@ namespace WetHands.Infrastructure.Documents
           table.AppendChild(new TableRow(
             CreateCell(index++.ToString()),
             CreateCell(item.Name ?? "—"),
-            CreateCell((item.QtyDirty ?? 0).ToString()),
+            CreateCell(item.QtyDirty.ToString()),
             CreateCell((item.QtyClean ?? 0).ToString()),
             CreateCell(item.CommentText ?? string.Empty)));
         }
