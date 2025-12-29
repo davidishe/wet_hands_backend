@@ -353,6 +353,35 @@ BEGIN
   CREATE UNIQUE INDEX IX_Cities_CountryId_Name ON [dbo].[Cities]([CountryId], [Name]);
 END;
 
+IF OBJECT_ID(N'[dbo].[ServiceTypes]', 'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[ServiceTypes] (
+    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [Code] NVARCHAR(64) NOT NULL,
+    [Name] NVARCHAR(256) NOT NULL
+  );
+  CREATE UNIQUE INDEX IX_ServiceTypes_Code ON [dbo].[ServiceTypes]([Code]);
+END;
+
+IF OBJECT_ID(N'[dbo].[OrderStatuses]', 'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[OrderStatuses] (
+    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [Name] NVARCHAR(256) NOT NULL,
+    [Description] NVARCHAR(MAX) NULL,
+    [Icon] NVARCHAR(128) NULL
+  );
+END;
+
+IF OBJECT_ID(N'[dbo].[OrderItemTypes]', 'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[OrderItemTypes] (
+    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [Weight] INT NOT NULL CONSTRAINT DF_OrderItemTypes_Weight DEFAULT(0),
+    [Name] NVARCHAR(256) NULL
+  );
+END;
+
 IF OBJECT_ID(N'[dbo].[MassagePlaceImages]', 'U') IS NULL
 BEGIN
   CREATE TABLE [dbo].[MassagePlaceImages] (
