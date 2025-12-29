@@ -1,13 +1,11 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace WetHands.Core.Models.Options
 {
   public class TelegramBotOptions
   {
-    [Required]
-    public string BotToken { get; set; } = null!;
+    public bool Enabled { get; set; } = false;
 
-    [Required]
-    public string LoginUrl { get; set; } = null!;
+    public string BotToken { get; set; } = string.Empty;
+
+    public string LoginUrl { get; set; } = string.Empty;
   }
 }

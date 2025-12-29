@@ -41,6 +41,12 @@ namespace WetHands.Infrastructure.Services.TelegramBot
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+      // Hard-disable when the feature is turned off in config.
+      if (!_options.Enabled)
+      {
+        return;
+      }
+
       if (string.IsNullOrWhiteSpace(_options.BotToken))
       {
         _logger.LogWarning("Telegram bot token is not configured. Telegram login will be disabled.");

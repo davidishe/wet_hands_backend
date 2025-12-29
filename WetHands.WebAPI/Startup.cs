@@ -124,7 +124,11 @@ namespace WebAPI
       services.AddSingleton<IOneTimeCodeService, OneTimeCodeService>();
       services.AddScoped<ISmsSenderService, MailjetSmsService>();
       services.AddTransient<IOrderDocumentService, OrderDocumentService>();
-      services.AddHostedService<TelegramBotBackgroundService>();
+      // Telegram bot is optional; keep it disabled by default to avoid noisy logs when token is invalid.
+      if (_config.GetValue<bool>("TelegramBot:Enabled"))
+      {
+        services.AddHostedService<TelegramBotBackgroundService>();
+      }
 
 
       services.AddSwaggerGen(c =>
