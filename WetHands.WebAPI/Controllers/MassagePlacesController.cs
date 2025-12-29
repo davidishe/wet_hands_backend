@@ -1,15 +1,14 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using WetHands.Core.Models;
+using WetHands.Infrastructure.Database;
 using WetHands.Core.Responses;
 
 namespace WebAPI.Controllers
@@ -17,15 +16,8 @@ namespace WebAPI.Controllers
   [AllowAnonymous]
   public class MassagePlacesController : BaseApiController
   {
-    private readonly IWebHostEnvironment _environment;
+    private readonly IDbRepository<MassagePlace> _massagePlaceRepository;
     private readonly ILogger<MassagePlacesController> _logger;
-    private readonly string _catalogFilePath;
-
-    private static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-      PropertyNameCaseInsensitive = true,
-      ReadCommentHandling = JsonCommentHandling.Skip
-    };
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> MassageCategories =
       new Dictionary<string, IReadOnlyList<string>>
@@ -168,12 +160,11 @@ namespace WebAPI.Controllers
       };
 
     public MassagePlacesController(
-      IWebHostEnvironment environment,
+      IDbRepository<MassagePlace> massagePlaceRepository,
       ILogger<MassagePlacesController> logger)
     {
-      _environment = environment;
+      _massagePlaceRepository = massagePlaceRepository;
       _logger = logger;
-      _catalogFilePath = Path.Combine(_environment.ContentRootPath, "Data", "massage_places.json");
     }
 
     [HttpGet]
@@ -192,40 +183,10 @@ namespace WebAPI.Controllers
       [FromQuery] bool includeGallery = true,
       CancellationToken cancellationToken = default)
     {
-      if (!System.IO.File.Exists(_catalogFilePath))
-      {
-        _logger.LogWarning("Massage catalog file {FilePath} not found", _catalogFilePath);
-        return Ok(Array.Empty<MassagePlaceDto>());
-      }
-
       try
       {
-        await using var stream = System.IO.File.OpenRead(_catalogFilePath);
-        var places = await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
-          ?? new List<MassagePlaceDto>();
+        var places = await LoadPlacesOrEmpty(cancellationToken);
 
-        // Default country for current dataset (no explicit country field in JSON).
-        for (var i = 0; i < places.Count; i++)
-        {
-          var p = places[i];
-          if (p != null && string.IsNullOrWhiteSpace(p.Country))
-          {
-            // All seed data cities are in Russia for now.
-            places[i] = new MassagePlaceDto
-            {
-              Name = p.Name,
-              Country = "Russia",
-              City = p.City,
-              Description = p.Description,
-              Rating = p.Rating,
-              MainImage = p.MainImage,
-              Gallery = p.Gallery,
-              Attributes = p.Attributes
-            };
-          }
-        }
-
-        // Server-side filters.
         var selectedCategories = ParseCsv(categories);
         var countryFilter = Normalize(country);
         var cityFilter = Normalize(city);
@@ -239,13 +200,17 @@ namespace WebAPI.Controllers
           maxRating = Math.Clamp(maxRating.Value, 0, 100);
         }
 
+        var dtos = places
+          .Select(p => ToDto(p, includeMainImage: true, includeGallery: true))
+          .ToList();
+
         if (selectedCategories.Count > 0 ||
             !string.IsNullOrWhiteSpace(countryFilter) ||
             !string.IsNullOrWhiteSpace(cityFilter) ||
             minRating.HasValue ||
             maxRating.HasValue)
         {
-          places = places
+          dtos = dtos
             .Where(p => MatchesFilters(
               p,
               selectedCategories,
@@ -256,32 +221,30 @@ namespace WebAPI.Controllers
             .ToList();
         }
 
-        // Server-side search.
         var query = (q ?? string.Empty).Trim();
         if (query.Length > 0)
         {
-          places = places
+          dtos = dtos
             .Where(p => MatchesQuery(p, query))
             .OrderByDescending(p => p.Rating)
             .ToList();
         }
 
-        // Server-side paging (useful for search).
         if (offset < 0) offset = 0;
         if (limit <= 0) limit = 200;
         limit = Math.Min(limit, 500);
-        if (offset > 0 || limit < places.Count)
+        if (offset > 0 || limit < dtos.Count)
         {
-          places = places.Skip(offset).Take(limit).ToList();
+          dtos = dtos.Skip(offset).Take(limit).ToList();
         }
 
         if (includeMainImage && includeGallery)
         {
-          return Ok(places);
+          return Ok(dtos);
         }
 
-        var projected = new List<MassagePlaceDto>(places.Count);
-        foreach (var place in places)
+        var projected = new List<MassagePlaceDto>(dtos.Count);
+        foreach (var place in dtos)
         {
           projected.Add(new MassagePlaceDto
           {
@@ -298,15 +261,10 @@ namespace WebAPI.Controllers
 
         return Ok(projected);
       }
-      catch (JsonException ex)
+      catch (Exception ex)
       {
-        _logger.LogError(ex, "Invalid massage catalog JSON in {FilePath}", _catalogFilePath);
-        return StatusCode(500, new ApiResponse(500, "Massage catalog JSON is invalid."));
-      }
-      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-      {
-        _logger.LogError(ex, "Unable to read massage catalog file {FilePath}", _catalogFilePath);
-        return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog file."));
+        _logger.LogError(ex, "Unable to read massage catalog from database");
+        return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog."));
       }
     }
 
@@ -326,64 +284,22 @@ namespace WebAPI.Controllers
         return BadRequest(new ApiResponse(400, "Parameter 'name' is required."));
       }
 
-      if (!System.IO.File.Exists(_catalogFilePath))
-      {
-        _logger.LogWarning("Massage catalog file {FilePath} not found", _catalogFilePath);
-        return NotFound(new ApiResponse(404, "Not found."));
-      }
-
       try
       {
-        await using var stream = System.IO.File.OpenRead(_catalogFilePath);
-        var places = await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
-          ?? new List<MassagePlaceDto>();
-
+        var places = await LoadPlacesOrEmpty(cancellationToken);
         var found = places.Find(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
         if (found == null)
         {
           return NotFound(new ApiResponse(404, "Not found."));
         }
 
-        if (includeMainImage && includeGallery)
-        {
-          if (string.IsNullOrWhiteSpace(found.Country))
-          {
-            found = new MassagePlaceDto
-            {
-              Name = found.Name,
-              Country = "Russia",
-              City = found.City,
-              Description = found.Description,
-              Rating = found.Rating,
-              MainImage = found.MainImage,
-              Gallery = found.Gallery,
-              Attributes = found.Attributes
-            };
-          }
-          return Ok(found);
-        }
-
-        return Ok(new MassagePlaceDto
-        {
-          Name = found.Name,
-          Country = string.IsNullOrWhiteSpace(found.Country) ? "Russia" : found.Country,
-          City = found.City,
-          Description = found.Description,
-          Rating = found.Rating,
-          MainImage = includeMainImage ? found.MainImage : string.Empty,
-          Gallery = includeGallery ? found.Gallery : Array.Empty<string>(),
-          Attributes = found.Attributes
-        });
+        var dto = ToDto(found, includeMainImage, includeGallery);
+        return Ok(dto);
       }
-      catch (JsonException ex)
+      catch (Exception ex)
       {
-        _logger.LogError(ex, "Invalid massage catalog JSON in {FilePath}", _catalogFilePath);
-        return StatusCode(500, new ApiResponse(500, "Massage catalog JSON is invalid."));
-      }
-      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-      {
-        _logger.LogError(ex, "Unable to read massage catalog file {FilePath}", _catalogFilePath);
-        return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog file."));
+        _logger.LogError(ex, "Unable to read massage catalog from database");
+        return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog."));
       }
     }
 
@@ -392,7 +308,7 @@ namespace WebAPI.Controllers
       CancellationToken cancellationToken = default)
     {
       var places = await LoadPlacesOrEmpty(cancellationToken);
-      var availableTypes = ExtractAvailableAttributes(places);
+      var availableTypes = ExtractAvailableAttributes(places.Select(ToDto).ToList());
 
       if (availableTypes.Count == 0)
       {
@@ -442,19 +358,6 @@ namespace WebAPI.Controllers
     public async Task<ActionResult<MassagePlaceFilterOptionsResponse>> GetFilterOptions(
       CancellationToken cancellationToken = default)
     {
-      if (!System.IO.File.Exists(_catalogFilePath))
-      {
-        _logger.LogWarning("Massage catalog file {FilePath} not found", _catalogFilePath);
-        return Ok(new MassagePlaceFilterOptionsResponse
-        {
-          Countries = new[] { "Russia" },
-          Cities = Array.Empty<string>(),
-          Categories = Array.Empty<string>(),
-          MinRating = 0,
-          MaxRating = 100
-        });
-      }
-
       try
       {
         var places = await LoadPlacesOrEmpty(cancellationToken);
@@ -500,112 +403,108 @@ namespace WebAPI.Controllers
           MaxRating = Math.Clamp(max, 0, 100)
         });
       }
-      catch (JsonException ex)
+      catch (Exception ex)
       {
-        _logger.LogError(ex, "Invalid massage catalog JSON in {FilePath}", _catalogFilePath);
-        return StatusCode(500, new ApiResponse(500, "Massage catalog JSON is invalid."));
-      }
-      catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-      {
-        _logger.LogError(ex, "Unable to read massage catalog file {FilePath}", _catalogFilePath);
-        return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog file."));
+        _logger.LogError(ex, "Unable to read massage catalog from database");
+        return StatusCode(500, new ApiResponse(500, "Unable to read massage catalog."));
       }
     }
 
-    private async Task<List<MassagePlaceDto>> LoadPlacesOrEmpty(CancellationToken cancellationToken)
+    private async Task<List<MassagePlace>> LoadPlacesOrEmpty(CancellationToken cancellationToken)
     {
-      if (!System.IO.File.Exists(_catalogFilePath)) return new List<MassagePlaceDto>();
-
-      await using var stream = System.IO.File.OpenRead(_catalogFilePath);
-      return await JsonSerializer.DeserializeAsync<List<MassagePlaceDto>>(stream, SerializerOptions, cancellationToken)
-        ?? new List<MassagePlaceDto>();
+      return await _massagePlaceRepository
+        .GetAll()
+        .AsNoTracking()
+        .ToListAsync(cancellationToken);
     }
 
-    private static string NormalizeKey(string? value)
+    private static MassagePlaceDto ToDto(MassagePlace place, bool includeMainImage = true, bool includeGallery = true)
     {
-      return (value ?? string.Empty).Trim();
-    }
-
-    private static string NormalizeLabel(string? value)
-    {
-      return (value ?? string.Empty).Trim();
-    }
-
-    private static Dictionary<string, string> ExtractAvailableAttributes(IEnumerable<MassagePlaceDto> places)
-    {
-      // key => canonical label
-      var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-      foreach (var p in places)
+      if (place == null)
       {
-        if (p?.Attributes == null) continue;
-        foreach (var raw in p.Attributes)
+        return new MassagePlaceDto
         {
-          var label = NormalizeLabel(raw);
-          if (string.IsNullOrWhiteSpace(label)) continue;
-          var key = NormalizeKey(label);
-          map.TryAdd(key, label);
-        }
-      }
-      return map;
-    }
-
-    private static bool MatchesQuery(MassagePlaceDto place, string q)
-    {
-      if (place == null) return false;
-      var query = (q ?? string.Empty).Trim();
-      if (query.Length == 0) return true;
-
-      // Support both phrase search (full query) and token search (words),
-      // so description is reliably matched even when the user types multiple words.
-      foreach (var token in TokenizeQuery(query))
-      {
-        if (token.Length == 0) continue;
-        if (MatchesQueryToken(place, token)) return true;
-      }
-
-      // As a fallback, try the full query as-is (useful for phrases).
-      return MatchesQueryToken(place, query);
-    }
-
-    private static bool MatchesQueryToken(MassagePlaceDto place, string token)
-    {
-      if (!string.IsNullOrWhiteSpace(place.Name) &&
-          place.Name.Contains(token, StringComparison.OrdinalIgnoreCase))
-      {
-        return true;
-      }
-
-      if (!string.IsNullOrWhiteSpace(place.City) &&
-          place.City.Contains(token, StringComparison.OrdinalIgnoreCase))
-      {
-        return true;
+          Name = string.Empty,
+          Country = "Russia",
+          City = string.Empty,
+          Description = string.Empty,
+          Rating = 0,
+          MainImage = includeMainImage ? string.Empty : string.Empty,
+          Gallery = includeGallery ? Array.Empty<string>() : Array.Empty<string>(),
+          Attributes = Array.Empty<string>()
+        };
       }
 
       var effectiveCountry = string.IsNullOrWhiteSpace(place.Country) ? "Russia" : place.Country;
-      if (!string.IsNullOrWhiteSpace(effectiveCountry) &&
-          effectiveCountry.Contains(token, StringComparison.OrdinalIgnoreCase))
-      {
-        return true;
-      }
 
-      // IMPORTANT: include description in search.
-      if (!string.IsNullOrWhiteSpace(place.Description) &&
-          place.Description.Contains(token, StringComparison.OrdinalIgnoreCase))
+      return new MassagePlaceDto
       {
-        return true;
-      }
+        Name = place.Name,
+        Country = effectiveCountry,
+        City = place.City,
+        Description = place.Description,
+        Rating = place.Rating,
+        MainImage = includeMainImage ? place.MainImage : string.Empty,
+        Gallery = includeGallery ? place.Gallery : Array.Empty<string>(),
+        Attributes = place.Attributes ?? Array.Empty<string>()
+      };
+    }
 
-      var attrs = place.Attributes;
-      if (attrs != null)
+    private Dictionary<string, string> ExtractAvailableAttributes(IReadOnlyList<MassagePlaceDto> places)
+    {
+      var available = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+      foreach (var place in places)
       {
-        foreach (var attr in attrs)
+        if (place?.Attributes == null) continue;
+
+        foreach (var attr in place.Attributes)
         {
-          if (string.IsNullOrWhiteSpace(attr)) continue;
-          if (attr.Contains(token, StringComparison.OrdinalIgnoreCase)) return true;
+          var key = NormalizeKey(attr);
+          var label = NormalizeLabel(attr);
+          if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(label)) continue;
+
+          available[key] = label;
         }
       }
 
-      return false;
+      return available;
+    }
+
+    private static string NormalizeKey(string value)
+    {
+      var normalized = NormalizeLabel(value);
+      return normalized?.Replace(" ", "").ToLowerInvariant() ?? string.Empty;
+    }
+
+    private static string? NormalizeLabel(string value)
+    {
+      var trimmed = value.Trim();
+      return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    private static bool MatchesQuery(MassagePlaceDto place, string query)
+    {
+      if (place == null) return false;
+      if (string.IsNullOrWhiteSpace(query)) return true;
+
+      // Simple tokenizer: lowercase words, split by separators.
+      var queryTokens = new HashSet<string>(TokenizeQuery(query), StringComparer.OrdinalIgnoreCase);
+      if (queryTokens.Count == 0) return true;
+
+      bool ContainsAll(string? source)
+      {
+        if (string.IsNullOrWhiteSpace(source)) return false;
+        var tokens = TokenizeQuery(source);
+        return queryTokens.All(qt => tokens.Any(t => t.Contains(qt, StringComparison.OrdinalIgnoreCase)));
+      }
+
+      // Search across key fields.
+      return ContainsAll(place.Name)
+        || ContainsAll(place.City)
+        || ContainsAll(place.Country)
+        || ContainsAll(place.Description)
+        || (place.Attributes?.Any(a => ContainsAll(a)) ?? false);
     }
 
     private static IEnumerable<string> TokenizeQuery(string query)
@@ -659,9 +558,6 @@ namespace WebAPI.Controllers
 
       if (selectedCategories.Count > 0)
       {
-        // Flexible matching:
-        // - If an item matches a category name (from `MassageCategories`), treat it as a category filter.
-        // - Otherwise treat it as a concrete service/type (i.e. a place attribute).
         var attrs = place.Attributes ?? Array.Empty<string>();
         var hasAny = false;
 
@@ -672,7 +568,6 @@ namespace WebAPI.Controllers
             foreach (var attr in attrs)
             {
               if (string.IsNullOrWhiteSpace(attr)) continue;
-              // Exact match (trim + ignore case) to avoid accidental substring matches.
               if (types.Any(t => string.Equals(NormalizeLabel(t), NormalizeLabel(attr), StringComparison.OrdinalIgnoreCase)))
               {
                 hasAny = true;
@@ -682,7 +577,6 @@ namespace WebAPI.Controllers
           }
           else
           {
-            // Exact match against attributes (service/type).
             foreach (var attr in attrs)
             {
               if (string.IsNullOrWhiteSpace(attr)) continue;
