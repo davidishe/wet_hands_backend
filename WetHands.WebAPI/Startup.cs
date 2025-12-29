@@ -33,6 +33,7 @@ using WetHands.Infrastructure.Services.Security;
 using WetHands.Infrastructure.Services.Sms;
 using WetHands.Infrastructure.Documents;
 using WetHands.Infrastructure.Services.TelegramBot;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace WebAPI
 {
@@ -87,6 +88,8 @@ namespace WebAPI
       services.AddCors();
       services.AddAutoMapper(typeof(Startup));
 
+      services.AddMemoryCache();
+
       services.AddScoped<IDbRepository<PaymentRequest>, DbRepository<PaymentRequest>>();
       services.AddScoped<IDbRepository<Favour>, DbRepository<Favour>>();
       services.AddScoped<IDbRepository<Grade>, DbRepository<Grade>>();
@@ -122,6 +125,7 @@ namespace WebAPI
       services.AddScoped<IDbRepository<ProposalDescriptionTranaltaion>, DbRepository<ProposalDescriptionTranaltaion>>();
       services.AddScoped<IEmailService, EmailService>();
       services.AddSingleton<IOneTimeCodeService, OneTimeCodeService>();
+      services.AddSingleton<IOneTimeCodeStore, MemoryOneTimeCodeStore>();
       services.AddScoped<ISmsSenderService, MailjetSmsService>();
       services.AddTransient<IOrderDocumentService, OrderDocumentService>();
       // Telegram bot is optional; keep it disabled by default to avoid noisy logs when token is invalid.

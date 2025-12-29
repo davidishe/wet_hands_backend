@@ -35,6 +35,7 @@ namespace WebAPI.Controllers.Auth
     private readonly IMapper _mapper;
     private readonly ILogger<AccountController> _logger;
     private readonly IOneTimeCodeService _oneTimeCodeService;
+    private readonly IOneTimeCodeStore _oneTimeCodeStore;
     private readonly ISmsSenderService _smsSenderService;
     private readonly IEmailService _emailService;
 
@@ -48,6 +49,7 @@ namespace WebAPI.Controllers.Auth
       IConfiguration config,
       IMapper mapper,
       IOneTimeCodeService oneTimeCodeService,
+      IOneTimeCodeStore oneTimeCodeStore,
       ISmsSenderService smsSenderService,
       IEmailService emailService,
       ILogger<AccountController> logger
@@ -59,6 +61,7 @@ namespace WebAPI.Controllers.Auth
       _userManager = userManager;
       _emailDomainMailJetSender = config.GetSection("AppSettings:EmailDomain").Value;
       _oneTimeCodeService = oneTimeCodeService;
+      _oneTimeCodeStore = oneTimeCodeStore;
       _smsSenderService = smsSenderService;
       _emailService = emailService;
       _logger = logger;
@@ -77,6 +80,7 @@ namespace WebAPI.Controllers.Auth
       try
       {
         var code = _oneTimeCodeService.CreateCode();
+        await _oneTimeCodeStore.StoreSmsCodeAsync(normalizedPhone, code, cancellationToken);
         await _smsSenderService.SendOneTimeCodeAsync(normalizedPhone, code, cancellationToken: cancellationToken);
         return Ok(new { expiresAtUtc = code.ExpiresAtUtc });
       }
@@ -130,6 +134,7 @@ namespace WebAPI.Controllers.Auth
       }
 
       var code = _oneTimeCodeService.CreateCode();
+      await _oneTimeCodeStore.StoreEmailCodeAsync(email, code);
       var (subject, body) = BuildEmailCodeMessage(langCode, code.Code);
 
       var mailRequest = new MailRequest()
@@ -175,6 +180,11 @@ namespace WebAPI.Controllers.Auth
       if (userForToken == null) return Unauthorized(new ApiResponse(404));
 
       // verify code for email here
+      var isValid = await _oneTimeCodeStore.ValidateAndConsumeEmailCodeAsync(email, decodedToken);
+      if (!isValid)
+      {
+        return Unauthorized(new ApiResponse(401, "Неверный код или email"));
+      }
 
       // var verifyUrl = "https://localhost:5090/nopassword/verify?email=" + email + "&token=" + decodedToken;
       // var res = await RetriveNoPasswordAuth(verifyUrl);
@@ -200,12 +210,13 @@ namespace WebAPI.Controllers.Auth
       // TODO: как-то научиться проверять токен _authService.Verify
       // if (isValid)
       // {
+      var jwt = await _tokenService.CreateToken(userForToken);
       var userToReturn = new UserToReturnDto
       {
         Email = userForToken.Email,
         FirstName = userForToken.FirstName,
         SecondName = userForToken.SecondName,
-        Token = decodedToken,
+        Token = jwt,
         UserRoles = await _userManager.GetRolesAsync(userForToken),
         IsVerified = true
       };
