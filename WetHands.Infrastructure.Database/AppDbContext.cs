@@ -40,6 +40,7 @@ namespace WetHands.Infrastructure.Database
 
     public DbSet<MassagePlace> MassagePlaces { get; set; }
     public DbSet<MassagePlaceImage> MassagePlaceImages { get; set; }
+    public DbSet<MassageCategory> MassageCategories { get; set; }
 
     public DbSet<Picture> Pictures { get; set; }
     public DbSet<File> Files { get; set; }
@@ -90,6 +91,15 @@ namespace WetHands.Infrastructure.Database
         entity.HasIndex(x => new { x.MassagePlaceId, x.IsMain });
         entity.Property(x => x.FileName).HasMaxLength(256);
         entity.Property(x => x.FileType).HasMaxLength(128);
+      });
+
+      modelBuilder.Entity<MassageCategory>(entity =>
+      {
+        entity.HasIndex(x => new { x.GroupName, x.Name }).IsUnique();
+        entity.Property(x => x.Name).IsRequired().HasMaxLength(256);
+        entity.Property(x => x.GroupName).HasMaxLength(256);
+        entity.Property(x => x.IsActive).HasDefaultValue(true);
+        entity.Property(x => x.SortOrder).HasDefaultValue(0);
       });
 
       modelBuilder.Entity<Country>(entity =>

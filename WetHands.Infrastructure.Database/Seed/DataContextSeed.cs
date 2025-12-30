@@ -10,6 +10,7 @@ using WetHands.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using WetHands.Core.Basic;
+using WetHands.Core.Models;
 
 namespace Infrastructure.Database.SeedData
 {
@@ -51,6 +52,26 @@ namespace Infrastructure.Database.SeedData
             foreach (var item in items)
             {
               context.Cities.Add(item);
+            }
+            await context.SaveChangesAsync();
+          }
+        }
+
+        // Seed selectable massage categories (server-administered list).
+        var existingCategories = await context.MassageCategories.AsNoTracking().ToListAsync();
+        if (existingCategories.Count == 0)
+        {
+          var itemsData = File.ReadAllText(path + @"/Seed/SeedData/massage-categories.json");
+          var items = JsonSerializer.Deserialize<List<MassageCategory>>(itemsData);
+          if (items != null)
+          {
+            foreach (var item in items)
+            {
+              if (item == null) continue;
+              if (string.IsNullOrWhiteSpace(item.Name)) continue;
+              item.Name = item.Name.Trim();
+              item.GroupName = string.IsNullOrWhiteSpace(item.GroupName) ? null : item.GroupName.Trim();
+              context.MassageCategories.Add(item);
             }
             await context.SaveChangesAsync();
           }
@@ -395,6 +416,18 @@ BEGIN
     [Size] INT NULL
   );
   CREATE INDEX IX_MassagePlaceImages_MassagePlaceId_IsMain ON [dbo].[MassagePlaceImages]([MassagePlaceId], [IsMain]);
+END;
+
+IF OBJECT_ID(N'[dbo].[MassageCategories]', 'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[MassageCategories] (
+    [Id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [Name] NVARCHAR(256) NOT NULL,
+    [GroupName] NVARCHAR(256) NULL,
+    [IsActive] BIT NOT NULL CONSTRAINT DF_MassageCategories_IsActive DEFAULT(1),
+    [SortOrder] INT NOT NULL CONSTRAINT DF_MassageCategories_SortOrder DEFAULT(0)
+  );
+  CREATE UNIQUE INDEX IX_MassageCategories_GroupName_Name ON [dbo].[MassageCategories]([GroupName], [Name]);
 END;
 
 IF COL_LENGTH('dbo.MassagePlaces', 'CountryId') IS NULL

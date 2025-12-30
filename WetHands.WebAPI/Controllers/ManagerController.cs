@@ -19,6 +19,7 @@ namespace WebAPI.Controllers
   {
     private readonly IDbRepository<MassagePlace> _massagePlaceRepository;
     private readonly IDbRepository<MassagePlaceImage> _massagePlaceImageRepository;
+    private readonly IDbRepository<MassageCategory> _massageCategoryRepository;
     private readonly IDbRepository<Country> _countryRepository;
     private readonly IDbRepository<City> _cityRepository;
     private readonly ILogger<ManagerController> _logger;
@@ -26,12 +27,14 @@ namespace WebAPI.Controllers
     public ManagerController(
       IDbRepository<MassagePlace> massagePlaceRepository,
       IDbRepository<MassagePlaceImage> massagePlaceImageRepository,
+      IDbRepository<MassageCategory> massageCategoryRepository,
       IDbRepository<Country> countryRepository,
       IDbRepository<City> cityRepository,
       ILogger<ManagerController> logger)
     {
       _massagePlaceRepository = massagePlaceRepository;
       _massagePlaceImageRepository = massagePlaceImageRepository;
+      _massageCategoryRepository = massageCategoryRepository;
       _countryRepository = countryRepository;
       _cityRepository = cityRepository;
       _logger = logger;
@@ -67,6 +70,13 @@ namespace WebAPI.Controllers
 
       var resolved = await ResolveCountryCityAsync(request, cancellationToken);
 
+      var (normalizedAttributes, attributesError) =
+        await ValidateAndNormalizeAttributesAsync(request.Attributes, cancellationToken);
+      if (!string.IsNullOrWhiteSpace(attributesError))
+      {
+        return BadRequest(attributesError);
+      }
+
       var entity = new MassagePlace
       {
         Name = normalizedName,
@@ -79,7 +89,7 @@ namespace WebAPI.Controllers
         // Images are stored in MassagePlaceImages, not in legacy base64 fields.
         MainImage = null,
         Gallery = new List<string>(),
-        Attributes = NormalizeList(request.Attributes)
+        Attributes = normalizedAttributes
       };
 
       try
@@ -135,6 +145,13 @@ namespace WebAPI.Controllers
 
       var resolved = await ResolveCountryCityAsync(request, cancellationToken);
 
+      var (normalizedAttributes, attributesError) =
+        await ValidateAndNormalizeAttributesAsync(request.Attributes, cancellationToken);
+      if (!string.IsNullOrWhiteSpace(attributesError))
+      {
+        return BadRequest(attributesError);
+      }
+
       existing.Name = normalizedName;
       existing.CountryId = resolved.CountryId;
       existing.CityId = resolved.CityId;
@@ -143,7 +160,7 @@ namespace WebAPI.Controllers
       existing.Description = request.Description.Trim();
       existing.Rating = Math.Clamp(request.Rating, 0, 100);
       // Images are stored in MassagePlaceImages, not in legacy base64 fields.
-      existing.Attributes = NormalizeList(request.Attributes);
+      existing.Attributes = normalizedAttributes;
 
       try
       {
@@ -357,6 +374,38 @@ namespace WebAPI.Controllers
         .Select(s => s.Trim())
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToList() ?? new List<string>();
+    }
+
+    private async Task<(List<string> Normalized, string? Error)> ValidateAndNormalizeAttributesAsync(
+      IEnumerable<string>? requested,
+      CancellationToken cancellationToken)
+    {
+      var normalized = NormalizeList(requested);
+      if (normalized.Count == 0) return (normalized, null);
+
+      var allowed = await _massageCategoryRepository
+        .GetAll()
+        .AsNoTracking()
+        .Where(x => x.IsActive)
+        .Select(x => x.Name)
+        .ToListAsync(cancellationToken);
+
+      var allowedSet = new HashSet<string>(
+        allowed
+          .Where(x => !string.IsNullOrWhiteSpace(x))
+          .Select(x => x.Trim()),
+        StringComparer.OrdinalIgnoreCase);
+
+      var unknown = normalized.Where(x => !allowedSet.Contains(x)).ToList();
+      if (unknown.Count == 0) return (normalized, null);
+
+      // Return a human friendly message so the client can show it to user.
+      var msg =
+        "Некоторые категории отсутствуют в справочнике и не могут быть сохранены: " +
+        string.Join(", ", unknown) +
+        ". Обратитесь к администратору, чтобы добавить их в справочник (MassageCategories).";
+
+      return (normalized, msg);
     }
 
     public class MassagePlaceUpsertRequest

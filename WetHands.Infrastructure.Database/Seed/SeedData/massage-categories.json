@@ -1,0 +1,52 @@
+[
+  { "GroupName": "Классические и лечебные", "Name": "Классический массаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Классические и лечебные", "Name": "Лечебный массаж", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Классические и лечебные", "Name": "Профилактический массаж", "IsActive": true, "SortOrder": 30 },
+  { "GroupName": "Классические и лечебные", "Name": "Общеукрепляющий массаж", "IsActive": true, "SortOrder": 40 },
+  { "GroupName": "Классические и лечебные", "Name": "Локальный (зональный) массаж", "IsActive": true, "SortOrder": 50 },
+
+  { "GroupName": "Медицинские (по показаниям)", "Name": "Ортопедический массаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Медицинские (по показаниям)", "Name": "Неврологический массаж", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Медицинские (по показаниям)", "Name": "Кардиологический массаж", "IsActive": true, "SortOrder": 30 },
+  { "GroupName": "Медицинские (по показаниям)", "Name": "Висцеральный массаж", "IsActive": true, "SortOrder": 40 },
+  { "GroupName": "Медицинские (по показаниям)", "Name": "Детский лечебный массаж", "IsActive": true, "SortOrder": 50 },
+
+  { "GroupName": "Спортивные", "Name": "Спортивный массаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Спортивные", "Name": "Восстановительный", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Спортивные", "Name": "Тонизирующий", "IsActive": true, "SortOrder": 30 },
+  { "GroupName": "Спортивные", "Name": "Расслабляющий спортивный", "IsActive": true, "SortOrder": 40 },
+
+  { "GroupName": "Восточные и традиционные практики", "Name": "Тайский массаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Восточные и традиционные практики", "Name": "Балийский массаж", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Восточные и традиционные практики", "Name": "Шиацу", "IsActive": true, "SortOrder": 30 },
+  { "GroupName": "Восточные и традиционные практики", "Name": "Аюрведический массаж", "IsActive": true, "SortOrder": 40 },
+
+  { "GroupName": "Расслабляющие и SPA", "Name": "Релакс-массаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Расслабляющие и SPA", "Name": "Антистресс-массаж", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Расслабляющие и SPA", "Name": "Аромамассаж", "IsActive": true, "SortOrder": 30 },
+  { "GroupName": "Расслабляющие и SPA", "Name": "Масляный массаж", "IsActive": true, "SortOrder": 40 },
+
+  { "GroupName": "Косметические и эстетические", "Name": "Косметический массаж лица", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Косметические и эстетические", "Name": "Скульптурный массаж лица", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Косметические и эстетические", "Name": "Лимфодренажный массаж", "IsActive": true, "SortOrder": 30 },
+  { "GroupName": "Косметические и эстетические", "Name": "Антицеллюлитный массаж", "IsActive": true, "SortOrder": 40 },
+
+  { "GroupName": "Лимфодренаж и коррекция фигуры", "Name": "Ручной лимфодренаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Лимфодренаж и коррекция фигуры", "Name": "Аппаратный лимфодренаж", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Лимфодренаж и коррекция фигуры", "Name": "LPG-массаж", "IsActive": true, "SortOrder": 30 },
+  { "GroupName": "Лимфодренаж и коррекция фигуры", "Name": "Баночный массаж", "IsActive": true, "SortOrder": 40 },
+
+  { "GroupName": "Рефлексотерапия", "Name": "Точечный массаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Рефлексотерапия", "Name": "Акупрессура", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Рефлексотерапия", "Name": "Массаж стоп", "IsActive": true, "SortOrder": 30 },
+
+  { "GroupName": "Аппаратные виды", "Name": "Вибромассаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Аппаратные виды", "Name": "Ультразвуковой массаж", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Аппаратные виды", "Name": "Прессотерапия", "IsActive": true, "SortOrder": 30 },
+
+  { "GroupName": "Специальные категории", "Name": "Детский массаж", "IsActive": true, "SortOrder": 10 },
+  { "GroupName": "Специальные категории", "Name": "Офисный массаж", "IsActive": true, "SortOrder": 20 },
+  { "GroupName": "Специальные категории", "Name": "Экспресс-массаж", "IsActive": true, "SortOrder": 30 }
+]
+
+

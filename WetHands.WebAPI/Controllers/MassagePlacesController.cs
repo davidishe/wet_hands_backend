@@ -21,159 +21,22 @@ namespace WebAPI.Controllers
   {
     private readonly IDbRepository<MassagePlace> _massagePlaceRepository;
     private readonly IDbRepository<MassagePlaceImage> _massagePlaceImageRepository;
+    private readonly IDbRepository<MassageCategory> _massageCategoryRepository;
     private readonly IDbRepository<Country> _countryRepository;
     private readonly IDbRepository<City> _cityRepository;
     private readonly ILogger<MassagePlacesController> _logger;
 
-    private static readonly IReadOnlyDictionary<string, IReadOnlyList<string>> MassageCategories =
-      new Dictionary<string, IReadOnlyList<string>>
-      {
-        ["Классические и лечебные"] = new[]
-        {
-          "Классический массаж",
-          "Лечебный массаж",
-          "Профилактический массаж",
-          "Общеукрепляющий массаж",
-          "Локальный (зональный) массаж",
-          "Сегментарный массаж",
-          "Периостальный массаж",
-          "Рефлекторно-сегментарный массаж",
-          "Соединительнотканный массаж",
-          "Миофасциальный релиз",
-          "Триггерный массаж",
-          "Посттравматический массаж",
-          "Реабилитационный массаж"
-        },
-        ["Медицинские (по показаниям)"] = new[]
-        {
-          "Ортопедический массаж",
-          "Неврологический массаж",
-          "Кардиологический массаж",
-          "Пульмонологический массаж",
-          "Висцеральный массаж",
-          "Урологический массаж",
-          "Гинекологический массаж",
-          "Логопедический массаж",
-          "Детский лечебный массаж",
-          "Массаж для беременных (медицинский протокол)"
-        },
-        ["Спортивные"] = new[]
-        {
-          "Спортивный массаж",
-          "Предтренировочный",
-          "Послетренировочный",
-          "Восстановительный",
-          "Тонизирующий",
-          "Расслабляющий спортивный",
-          "Массаж при мышечных спазмах",
-          "Массаж для бегунов",
-          "Массаж для силовых тренировок"
-        },
-        ["Восточные и традиционные практики"] = new[]
-        {
-          "Тайский массаж",
-          "Балийский массаж",
-          "Китайский массаж (Туина)",
-          "Шиацу",
-          "Японский массаж Амма",
-          "Индийский массаж (Абхьянга)",
-          "Аюрведический массаж",
-          "Ломи-ломи (гавайский)",
-          "Тибетский массаж",
-          "Кореанский массаж",
-          "Бирманский массаж"
-        },
-        ["Расслабляющие и SPA"] = new[]
-        {
-          "Релакс-массаж",
-          "Антистресс-массаж",
-          "Аромамассаж",
-          "Масляный массаж",
-          "Свечной массаж",
-          "Шоколадный массаж",
-          "Медовый массаж",
-          "Винный массаж",
-          "Массаж с камнями (стоун-терапия)",
-          "Тепловой массаж",
-          "Холодный массаж (крио-элементы)"
-        },
-        ["Косметические и эстетические"] = new[]
-        {
-          "Косметический массаж лица",
-          "Буккальный массаж",
-          "Скульптурный массаж лица",
-          "Пластический массаж",
-          "Лифтинг-массаж",
-          "Антивозрастной массаж",
-          "Лимфодренажный массаж",
-          "Антицеллюлитный массаж",
-          "Моделирующий массаж",
-          "Массаж шеи и декольте"
-        },
-        ["Лимфодренаж и коррекция фигуры"] = new[]
-        {
-          "Ручной лимфодренаж",
-          "Аппаратный лимфодренаж",
-          "Вакуумный массаж",
-          "LPG-массаж",
-          "Баночный массаж",
-          "Массаж для похудения",
-          "Коррекционный массаж",
-          "Детокс-массаж"
-        },
-        ["Рефлексотерапия"] = new[]
-        {
-          "Рефлекторный массаж",
-          "Точечный массаж",
-          "Акупрессура",
-          "Су-джок",
-          "Массаж стоп",
-          "Плантарный массаж",
-          "Аурикулярный массаж"
-        },
-        ["Аппаратные виды"] = new[]
-        {
-          "Вибромассаж",
-          "Ультразвуковой массаж",
-          "Вакуумно-роликовый массаж",
-          "Гидромассаж",
-          "Подводный душ-массаж",
-          "Прессотерапия",
-          "Электромиостимуляция",
-          "Пневмомассаж"
-        },
-        ["Специальные категории"] = new[]
-        {
-          "Детский массаж",
-          "Массаж для новорождённых",
-          "Массаж для пожилых",
-          "Офисный массаж",
-          "Экспресс-массаж",
-          "Корпоративный массаж",
-          "Домашний массаж",
-          "Психосоматический массаж",
-          "Энергетический массаж"
-        },
-        ["Альтернативные и энергетические"] = new[]
-        {
-          "Энергетический массаж",
-          "Рэйки-массаж",
-          "Биоэнергетический массаж",
-          "Чакральный массаж",
-          "Краниосакральная терапия",
-          "Остеопатические техники"
-        }
-      };
-
     public MassagePlacesController(
       IDbRepository<MassagePlace> massagePlaceRepository,
       IDbRepository<MassagePlaceImage> massagePlaceImageRepository,
+      IDbRepository<MassageCategory> massageCategoryRepository,
       IDbRepository<Country> countryRepository,
       IDbRepository<City> cityRepository,
       ILogger<MassagePlacesController> logger)
     {
       _massagePlaceRepository = massagePlaceRepository;
       _massagePlaceImageRepository = massagePlaceImageRepository;
+      _massageCategoryRepository = massageCategoryRepository;
       _countryRepository = countryRepository;
       _cityRepository = cityRepository;
       _logger = logger;
@@ -198,6 +61,7 @@ namespace WebAPI.Controllers
       try
       {
         var places = await LoadPlacesOrEmpty(cancellationToken);
+        var categoryGroups = await LoadActiveCategoryGroupsAsync(cancellationToken);
 
         var countryById = await _countryRepository
           .GetAll()
@@ -258,7 +122,8 @@ namespace WebAPI.Controllers
               countryFilter,
               cityFilter,
               minRating,
-              maxRating))
+              maxRating,
+              categoryGroups))
             .ToList();
         }
 
@@ -427,66 +292,10 @@ namespace WebAPI.Controllers
     public async Task<ActionResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>> GetCategories(
       CancellationToken cancellationToken = default)
     {
-      var places = await LoadPlacesOrEmpty(cancellationToken);
-      var lightweightDtos = places.Select(p => new MassagePlaceDto
-      {
-        Id = p.Id,
-        Name = p.Name,
-        CountryId = p.CountryId,
-        CityId = p.CityId,
-        Country = p.Country,
-        City = p.City,
-        Description = p.Description,
-        Rating = p.Rating,
-        MainImage = string.Empty,
-        Gallery = Array.Empty<string>(),
-        Attributes = p.Attributes?.ToArray() ?? Array.Empty<string>()
-      }).ToList();
-
-      var availableTypes = ExtractAvailableAttributes(lightweightDtos);
-
-      if (availableTypes.Count == 0)
-      {
-        return Ok(new Dictionary<string, IReadOnlyList<string>>
-        {
-          ["Другое"] = Array.Empty<string>()
-        });
-      }
-
-      // Filter predefined groups to only types that are actually present in the catalog.
-      var covered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-      var result = new Dictionary<string, IReadOnlyList<string>>();
-
-      foreach (var group in MassageCategories)
-      {
-        var filtered = group.Value
-          .Where(t => availableTypes.ContainsKey(NormalizeKey(t)))
-          .Select(NormalizeLabel)
-          .Where(t => !string.IsNullOrWhiteSpace(t))
-          .Distinct(StringComparer.OrdinalIgnoreCase)
-          .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-          .ToArray();
-
-        if (filtered.Length == 0) continue;
-
-        foreach (var t in filtered) covered.Add(NormalizeKey(t));
-        result[group.Key] = filtered;
-      }
-
-      // Everything else goes to "Other".
-      var other = availableTypes
-        .Keys
-        .Where(k => !covered.Contains(k))
-        .Select(k => availableTypes[k])
-        .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-
-      if (other.Length > 0 || result.Count == 0)
-      {
-        result["Другое"] = other;
-      }
-
-      return Ok(result);
+      var grouped = await LoadActiveCategoryGroupsAsync(cancellationToken);
+      return Ok(grouped.Count == 0
+        ? new Dictionary<string, IReadOnlyList<string>> { ["Другое"] = Array.Empty<string>() }
+        : grouped);
     }
 
     [HttpGet("filterOptions")]
@@ -496,10 +305,10 @@ namespace WebAPI.Controllers
       try
       {
         var places = await LoadPlacesOrEmpty(cancellationToken);
+        var categoryGroups = await LoadActiveCategoryGroupsAsync(cancellationToken);
 
         var countries = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var cities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var categories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var min = 100;
         var max = 0;
 
@@ -510,16 +319,6 @@ namespace WebAPI.Controllers
 
           min = Math.Min(min, p.Rating);
           max = Math.Max(max, p.Rating);
-
-          var attrs = p.Attributes;
-          if (attrs != null)
-          {
-            foreach (var a in attrs)
-            {
-              var label = NormalizeLabel(a);
-              if (!string.IsNullOrWhiteSpace(label)) categories.Add(label);
-            }
-          }
         }
 
         // Countries/cities are driven by dedicated DB catalogs (seeded).
@@ -549,7 +348,13 @@ namespace WebAPI.Controllers
 
         var countriesArr = countries.OrderBy(x => x).ToArray();
         var citiesArr = cities.OrderBy(x => x).ToArray();
-        var categoriesArr = categories.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
+        var categoriesArr = categoryGroups
+          .SelectMany(kvp => kvp.Value ?? Array.Empty<string>())
+          .Select(NormalizeLabel)
+          .Where(x => !string.IsNullOrWhiteSpace(x))
+          .Distinct(StringComparer.OrdinalIgnoreCase)
+          .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+          .ToArray();
 
         return Ok(new MassagePlaceFilterOptionsResponse
         {
@@ -754,7 +559,8 @@ namespace WebAPI.Controllers
       string? country,
       string? city,
       int? minRating,
-      int? maxRating)
+      int? maxRating,
+      IReadOnlyDictionary<string, IReadOnlyList<string>> categoryGroups)
     {
       if (place == null) return false;
 
@@ -786,12 +592,17 @@ namespace WebAPI.Controllers
 
         foreach (var item in selectedCategories)
         {
-          if (MassageCategories.TryGetValue(item, out var types) && types != null)
+          var normalizedItem = NormalizeLabel(item);
+          if (string.IsNullOrWhiteSpace(normalizedItem)) continue;
+
+          // Backward compatibility: if a group name is passed as a filter, match any category within that group.
+          if (categoryGroups.TryGetValue(normalizedItem, out var groupItems) && groupItems != null && groupItems.Count > 0)
           {
             foreach (var attr in attrs)
             {
-              if (string.IsNullOrWhiteSpace(attr)) continue;
-              if (types.Any(t => string.Equals(NormalizeLabel(t), NormalizeLabel(attr), StringComparison.OrdinalIgnoreCase)))
+              var normalizedAttr = NormalizeLabel(attr);
+              if (string.IsNullOrWhiteSpace(normalizedAttr)) continue;
+              if (groupItems.Any(t => string.Equals(NormalizeLabel(t), normalizedAttr, StringComparison.OrdinalIgnoreCase)))
               {
                 hasAny = true;
                 break;
@@ -802,8 +613,9 @@ namespace WebAPI.Controllers
           {
             foreach (var attr in attrs)
             {
-              if (string.IsNullOrWhiteSpace(attr)) continue;
-              if (string.Equals(NormalizeLabel(attr), NormalizeLabel(item), StringComparison.OrdinalIgnoreCase))
+              var normalizedAttr = NormalizeLabel(attr);
+              if (string.IsNullOrWhiteSpace(normalizedAttr)) continue;
+              if (string.Equals(normalizedAttr, normalizedItem, StringComparison.OrdinalIgnoreCase))
               {
                 hasAny = true;
                 break;
@@ -818,6 +630,51 @@ namespace WebAPI.Controllers
       }
 
       return true;
+    }
+
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> LoadActiveCategoryGroupsAsync(
+      CancellationToken cancellationToken)
+    {
+      var items = await _massageCategoryRepository
+        .GetAll()
+        .AsNoTracking()
+        .Where(x => x.IsActive)
+        .OrderBy(x => x.GroupName)
+        .ThenBy(x => x.SortOrder)
+        .ThenBy(x => x.Name)
+        .Select(x => new { x.GroupName, x.Name })
+        .ToListAsync(cancellationToken);
+
+      // Preserve group order as defined by the sorted query above.
+      var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+      var tmp = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+      var groupOrder = new List<string>();
+
+      foreach (var it in items)
+      {
+        var groupName = NormalizeLabel(it.GroupName ?? string.Empty) ?? "Другое";
+        var name = NormalizeLabel(it.Name);
+        if (string.IsNullOrWhiteSpace(name)) continue;
+
+        if (!tmp.TryGetValue(groupName, out var list))
+        {
+          list = new List<string>();
+          tmp[groupName] = list;
+          groupOrder.Add(groupName);
+        }
+
+        if (!list.Any(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase)))
+        {
+          list.Add(name);
+        }
+      }
+
+      foreach (var g in groupOrder)
+      {
+        result[g] = tmp[g];
+      }
+
+      return result;
     }
 
     private static List<string> ParseCsv(string? value)

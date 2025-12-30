@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using AutoMapper;
 using Microsoft.AspNetCore.Authorization;
@@ -26,6 +27,7 @@ namespace WebAPI.Controllers
     private readonly IRoleManagerService _roleManager;
     private readonly IDbRepository<NftPlot> _nftPlotRepo;
     private readonly IDbRepository<Order> _plotRepo;
+    private readonly IDbRepository<MassageCategory> _massageCategoryRepo;
 
 
     // 
@@ -34,6 +36,7 @@ namespace WebAPI.Controllers
       IMapper mapper,
       IDbRepository<NftPlot> nftPlotRepo,
       IDbRepository<Order> plotRepo,
+      IDbRepository<MassageCategory> massageCategoryRepo,
       IRoleManagerService roleManager)
     {
       _mapper = mapper;
@@ -41,6 +44,7 @@ namespace WebAPI.Controllers
       _roleManager = roleManager;
       _nftPlotRepo = nftPlotRepo;
       _plotRepo = plotRepo;
+      _massageCategoryRepo = massageCategoryRepo;
     }
 
     [HttpPost]
@@ -132,6 +136,155 @@ namespace WebAPI.Controllers
       var mappedPlots = _mapper.Map<IReadOnlyList<Order>, IReadOnlyList<OrderDto>>(plotsToMap);
       return Ok(mappedPlots);
 
+    }
+
+    // -----------------------------
+    // Massage categories admin CRUD
+    // -----------------------------
+
+    [Authorize]
+    [HttpGet]
+    [Route("massageCategories")]
+    public async Task<ActionResult<IReadOnlyList<MassageCategory>>> GetMassageCategories(
+      [FromQuery] bool includeInactive = false)
+    {
+      var caller = await _userManager.FindByClaimsCurrentUser(HttpContext.User);
+      if (caller is null || caller.IsAdmin == false) return Forbid();
+
+      var query = _massageCategoryRepo.GetAll().AsNoTracking();
+      if (!includeInactive)
+      {
+        query = query.Where(x => x.IsActive);
+      }
+
+      var items = await query
+        .OrderBy(x => x.GroupName)
+        .ThenBy(x => x.SortOrder)
+        .ThenBy(x => x.Name)
+        .ToListAsync();
+
+      return Ok(items);
+    }
+
+    [Authorize]
+    [HttpPost]
+    [Route("massageCategories")]
+    public async Task<ActionResult<MassageCategory>> CreateMassageCategory(
+      [FromBody] MassageCategoryUpsertRequest request)
+    {
+      var caller = await _userManager.FindByClaimsCurrentUser(HttpContext.User);
+      if (caller is null || caller.IsAdmin == false) return Forbid();
+
+      if (!ModelState.IsValid) return BadRequest(ModelState);
+
+      var name = request.Name.Trim();
+      var group = NormalizeOptional(request.GroupName);
+
+      var duplicate = await _massageCategoryRepo
+        .GetAll()
+        .AsNoTracking()
+        .FirstOrDefaultAsync(x => x.GroupName == group && x.Name == name);
+
+      if (duplicate != null)
+      {
+        return Conflict($"Категория '{name}' уже существует в группе '{group ?? "Другое"}'.");
+      }
+
+      var entity = new MassageCategory
+      {
+        Name = name,
+        GroupName = group,
+        IsActive = request.IsActive,
+        SortOrder = request.SortOrder
+      };
+
+      var created = await _massageCategoryRepo.AddAsync(entity);
+      return Ok(created);
+    }
+
+    [Authorize]
+    [HttpPut]
+    [Route("massageCategories/{id:int}")]
+    public async Task<ActionResult<MassageCategory>> UpdateMassageCategory(
+      [FromRoute] int id,
+      [FromBody] MassageCategoryUpsertRequest request)
+    {
+      var caller = await _userManager.FindByClaimsCurrentUser(HttpContext.User);
+      if (caller is null || caller.IsAdmin == false) return Forbid();
+
+      if (!ModelState.IsValid) return BadRequest(ModelState);
+
+      var existing = await _massageCategoryRepo.GetByIdAsync(id);
+      if (existing == null) return NotFound();
+
+      var name = request.Name.Trim();
+      var group = NormalizeOptional(request.GroupName);
+
+      var duplicate = await _massageCategoryRepo
+        .GetAll()
+        .AsNoTracking()
+        .AnyAsync(x => x.Id != id && x.GroupName == group && x.Name == name);
+
+      if (duplicate)
+      {
+        return Conflict($"Категория '{name}' уже существует в группе '{group ?? "Другое"}'.");
+      }
+
+      existing.Name = name;
+      existing.GroupName = group;
+      existing.IsActive = request.IsActive;
+      existing.SortOrder = request.SortOrder;
+
+      await _massageCategoryRepo.UpdateAsync(existing);
+      return Ok(existing);
+    }
+
+    [Authorize]
+    [HttpDelete]
+    [Route("massageCategories/{id:int}")]
+    public async Task<ActionResult> DeleteMassageCategory(
+      [FromRoute] int id,
+      [FromQuery] bool hard = false)
+    {
+      var caller = await _userManager.FindByClaimsCurrentUser(HttpContext.User);
+      if (caller is null || caller.IsAdmin == false) return Forbid();
+
+      var existing = await _massageCategoryRepo.GetByIdAsync(id);
+      if (existing == null) return NotFound();
+
+      if (hard)
+      {
+        await _massageCategoryRepo.DeleteAsync(existing);
+        return Ok();
+      }
+
+      if (existing.IsActive)
+      {
+        existing.IsActive = false;
+        await _massageCategoryRepo.UpdateAsync(existing);
+      }
+
+      return Ok();
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+      var trimmed = value?.Trim();
+      return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    public class MassageCategoryUpsertRequest
+    {
+      [Required]
+      [MaxLength(256)]
+      public required string Name { get; init; }
+
+      [MaxLength(256)]
+      public string? GroupName { get; init; }
+
+      public bool IsActive { get; init; } = true;
+
+      public int SortOrder { get; init; } = 0;
     }
 
 
